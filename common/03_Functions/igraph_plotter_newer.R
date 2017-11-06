@@ -34,7 +34,8 @@ add.vertex.shape("fcircle", clip=igraph.shape.noclip,plot=mycircle, parameters=l
 ###################################
 
 igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALSE,prefix=cytodir,filename="",vertexsize=15,lay_out=layout_with_dh(ig,maxiter=200,cool.fact=0.95,weight.node.dist=.65),optlabel="",optvalue="",optchar="",make.vertex.label=TRUE,return_graph=FALSE,plot_bipartite=FALSE,vertex.label.cex=.55,legendcex=1,plotd3=FALSE,plotwhich=c(1,2,3),main=NULL){
- 
+  #Step 0
+  require(RNeo4j)
   #Step 1: return the nodes
   allnodes<-data.frame(node_id=character(),nodename=character(),kind=character(),square=character(),edge=numeric(),logFC=numeric(),diffME=numeric())
   for (nodetype in nodelist){

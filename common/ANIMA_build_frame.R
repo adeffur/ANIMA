@@ -79,10 +79,10 @@
   print(paste("Begin time:",ds))
 
 #switch NEO4J and Cytoscape on or off independently ####
-  neoinsert<-"off" #debug
+  neoinsert<-"on" #debug
   if (neoinsert=="on"){
   #initialise neo4j db
-    graph<-startGraph("http://192.168.65.2:8474/db/data/")#using docker for Mac!
+    graph<-startGraph("http://192.168.65.2:10474/db/data/")#using docker for Mac!
     graph$version
     print("clearing graph")
     clear(graph,input=FALSE)

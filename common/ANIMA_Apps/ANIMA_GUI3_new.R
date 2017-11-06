@@ -18,7 +18,7 @@ datadir="~/output/RData"
 modcordir="~/output/project/modcor"
 
 library(shiny)
-library(RNeo4j)
+
 library(networkD3)
 library(htmlwidgets)
 library(igraph)
@@ -40,8 +40,9 @@ scripts<-system(paste("ls","~/scripts"),intern=TRUE)
 datafiles<-system(paste("ls",datadir),intern=TRUE)
 excl<-grep("86|393",datafiles)
 datafiles<-datafiles[!1:length(datafiles)%in%excl]
-source(file.path("~/source_data/questions.R"))
-source("~/source_data/setlist.R")
+source(file.path("~/source_data/questions.R"),local=TRUE)
+source("~/source_data/setlist.R",local=TRUE)
+library(RNeo4j)
 graph<-startGraph(graphstring)#!!!!! note the address!!
 
 shadowtext <- function(x, y=NULL, labels, col='white', bg='black', 
@@ -101,16 +102,16 @@ dir.annot<-file.path(dir.root,"source_data")
 
 buildlisting<-system(paste("ls","~/output/build/"),intern=TRUE)
 
-source(file.path(dir.R.files,"igraph_plotter_newer.R"))
-source(file.path(dir.R.files,"moduleMeta.R"))
-source(file.path("~/source_data/questions.R"))
-source(file.path(dir.R.files,"probe_boxplot4.R"))
-source(file.path(dir.R.files,"mwat.R"))
+source(file.path(dir.R.files,"igraph_plotter_newer.R"),local=TRUE)
+source(file.path(dir.R.files,"moduleMeta.R"),local=TRUE)
+source(file.path("~/source_data/questions.R"),local=TRUE)
+source(file.path(dir.R.files,"probe_boxplot4.R"),local=TRUE)
+source(file.path(dir.R.files,"mwat.R"),local=TRUE)
 
 ##Required for G1
 
 #new
-source("~/source_data/setlist.R")
+source("~/source_data/setlist.R",local=TRUE)
 #end new
 
 edgelist<-1:5
@@ -139,7 +140,8 @@ print("finished loading datasets")
 ###Required for MM
 data<-cypher(graph,"MATCH (n:wgcna) RETURN DISTINCT n.square AS sets")
 all<-1:258
-
+print("debug start")
+print(data$sets)
 neutromods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(c:cellEx)-[r2]-(c2:CELL) WHERE c2.name = 'neutrophil' RETURN DISTINCT b.name")$b.name
 monomods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(c:cellEx)-[r2]-(c2:CELL) WHERE c2.name = 'monocyte' RETURN DISTINCT b.name")$b.name
 bcellmods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(c:cellEx)-[r2]-(c2:CELL) WHERE c2.name = 'B-cell' RETURN DISTINCT b.name")$b.name
@@ -245,11 +247,13 @@ labels<-squares
 labelsvec<-paste(squares,collapse="|")
 
 #Required for cellcore3
-source(file.path(dir.R.files,"cellCore3.R"))
+source(file.path(dir.R.files,"cellCore3.R"),local=TRUE)
 
 query<-"MATCH (c:cellEx) RETURN DISTINCT c.name AS cellname2"
 cellnamelist2<-cypher(graph,query)
 cellnames2<-cellnamelist2$cellname2
+
+
   
 # Define UI 
 ui<-fluidPage(
@@ -579,9 +583,12 @@ ui<-fluidPage(
 )
 
 
-# Define server logic required to draw a histogram
+# Define server logic 
 server <- shinyServer(function(input, output) {
-   #REACTIVE FUNCTIONS
+  #libraries
+  library(RNeo4j)
+  graph<-startGraph(graphstring)#!!!!! note the address!!
+  #REACTIVE FUNCTIONS
    #SP
    setfun<-reactive({input$set})
    setfun2<-reactive({input$matchedset})
@@ -1228,15 +1235,15 @@ server <- shinyServer(function(input, output) {
      print("conversion successful")
      # Create force directed network plot
      #R version 3.3.0 (D3 version 3)
-     forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scale.category20()"),
-                  linkDistance = 100,fontSize=14,opacity=.9,opacityNoHover = .8,radiusCalculation = JS(" Math.sqrt(300)+6"), 
-                  Source = 'source', Target = 'target', 
-                  NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
-     #R version 3.3.0 (D3version 4)
-     # forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scaleOrdinal(d3.schemeCategory10)"),
-     #              linkDistance = 100,fontSize=14,opacity=.9,opacityNoHover = .8,radiusCalculation = JS(" Math.sqrt(300)+6"), 
-     #              Source = 'source', Target = 'target', 
+     # forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scale.category20()"),
+     #              linkDistance = 100,fontSize=14,opacity=.9,opacityNoHover = .8,radiusCalculation = JS(" Math.sqrt(300)+6"),
+     #              Source = 'source', Target = 'target',
      #              NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
+     #R version 3.3.3 (D3version 4)
+     forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scaleOrdinal(d3.schemeCategory10)"),
+                  linkDistance = 100,fontSize=14,opacity=.9,opacityNoHover = .8,radiusCalculation = JS(" Math.sqrt(300)+6"),
+                  Source = 'source', Target = 'target',
+                  NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
     
    })
    
@@ -2101,17 +2108,17 @@ server <- shinyServer(function(input, output) {
      #              Source = 'source', Target = 'target', 
      #              NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=TRUE)
      ##END NEW PASTE
-     #R version 3.3.0
-     forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scale.category20()"),
-                  linkDistance = 65,fontSize=14,opacity=.9,opacityNoHover = .7,radiusCalculation = JS(" Math.sqrt(300)+6"),
-                  Source = 'source', Target = 'target', 
-                  NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
-     
-     #R version 3.3.3
-     # forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scaleOrdinal(d3.schemeCategory10)"),
+     # #R version 3.3.0
+     # forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scale.category20()"),
      #              linkDistance = 65,fontSize=14,opacity=.9,opacityNoHover = .7,radiusCalculation = JS(" Math.sqrt(300)+6"),
-     #              Source = 'source', Target = 'target', 
+     #              Source = 'source', Target = 'target',
      #              NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
+
+     #R version 3.3.3
+     forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scaleOrdinal(d3.schemeCategory10)"),
+                  linkDistance = 65,fontSize=14,opacity=.9,opacityNoHover = .7,radiusCalculation = JS(" Math.sqrt(300)+6"),
+                  Source = 'source', Target = 'target',
+                  NodeID = 'name', Group = 'group',legend=TRUE,zoom = TRUE,bounded=FALSE)
    })
    
    #G2

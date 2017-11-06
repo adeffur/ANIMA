@@ -3780,13 +3780,13 @@ intModules = unique(bwmoduleColors)[modOrder]
 # do this for eachj block, i.e.TOM?
 
 ##don't do TOM plots at this stage
-load(file.path(dir.results,"TOM_blockwise-block.1.RData"))
-TOM<-as.matrix(TOM)
-dissTOM1=1-TOM
-# Transform dissTOM with a power to make moderately strong connections more visible in the heatmap
-plotTOM1 = dissTOM1^7;
-# Set diagonal to NA for a nicer plot
-diag(plotTOM1) = NA;
+# load(file.path(dir.results,"TOM_blockwise-block.1.RData"))
+# TOM<-as.matrix(TOM)
+# dissTOM1=1-TOM
+# # Transform dissTOM with a power to make moderately strong connections more visible in the heatmap
+# plotTOM1 = dissTOM1^7;
+# # Set diagonal to NA for a nicer plot
+# diag(plotTOM1) = NA;
 # Call the plot function
 #sizeGrWindow(9,9)
 
@@ -3896,6 +3896,9 @@ for (cytmod in 1:length(modules)){
   collectGarbage()
   gc()
 }
+rm(TOM)
+collectGarbage()
+gc()
 names(modNetList)<-modules
 #modNetList conatins all the individual module networks
 
@@ -4459,10 +4462,10 @@ for (module in 1:length(modulesNotGrey)){
   
 }#end small_mod_net creation and annotation
 
-#clean up
-rm(TOM)
-collectGarbage()
-gc()
+# #clean up
+# rm(TOM)
+# collectGarbage()
+# gc()
 
 #6_Pathway analysis*****************************************####
 
