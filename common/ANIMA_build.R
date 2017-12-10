@@ -78,11 +78,13 @@
   sessionInfo()
   print(paste("Begin time:",ds))
 
+  source("~/source_data/setlist.R")
+  
 #switch NEO4J and Cytoscape on or off independently ####
   neoinsert<-"on" #debug
   if (neoinsert=="on"){
   #initialise neo4j db
-    graph<-startGraph("http://192.168.65.2:10474/db/data/")#using docker for Mac!
+    graph<-startGraph(graphstring)#using docker for Mac!
     graph$version
     print("clearing graph")
     clear(graph,input=FALSE)
@@ -171,7 +173,7 @@ source(file.path(dir.data_root,"questions.R")) #this is specific to the project;
 #q.i<-1 #debug
 #q.i<-4 #debug
 #q.i<-5 #debug
-#for (q.i in c(5,4,2)){#debug on!
+#for (q.i in c(6,7,8)){#debug on!
 #real outer loop 
 for (q.i in 1:length(questions)){
 
@@ -408,7 +410,7 @@ figure<-1
     
     ##new
     #if ((q.i==1 & i==1)|(q.i==4 & i==1)) {#debug; hardcoded
-    if ((q.i==1 & i==1)|(q.i==2 & i==1)) {#debug; hardcoded
+    if ((q.i==1 & i==1)|(q.i==9 & i==1)) {#debug; hardcoded #current GBP
       
       nodes<-RNeo4j::nodes
       
@@ -2718,7 +2720,7 @@ thispower = sft$powerEstimate
 deepSplitParameter<-2
 
 #for really small samples avoid overcalling modules
-if(nrow(datExpr0)<20){deepSplitParameter=1}
+if(nrow(datExpr0)<20){deepSplitParameter=0}### edited
 
 if (is.na(thispower)){
 thispower=min(sft$fitIndices[sft$fitIndices$SFT.R.sq>0.75,]$Power)

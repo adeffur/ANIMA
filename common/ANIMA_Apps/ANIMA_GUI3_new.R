@@ -17,6 +17,14 @@ datadir="~/output/RData"
 #cellcordir="~/output/project/cellcor"
 modcordir="~/output/project/modcor"
 
+for (dir in c(tabledir, cytodir,venndir,figdir,igraphdir,datadir)) {
+  if (!file.exists(dir)) {
+    dir.create(dir, recursive=T,showWarnings=T)
+  }
+}
+
+
+
 library(shiny)
 
 library(networkD3)
@@ -253,6 +261,10 @@ query<-"MATCH (c:cellEx) RETURN DISTINCT c.name AS cellname2"
 cellnamelist2<-cypher(graph,query)
 cellnames2<-cellnamelist2$cellname2
 
+query<-"MATCH (c:cellprop) RETURN DISTINCT c.name AS cellname3"
+cellnamelist3<-cypher(graph,query)
+cellnames3<-cellnamelist3$cellname3
+
 
   
 # Define UI 
@@ -425,7 +437,8 @@ ui<-fluidPage(
                   )
                   ,
                   fluidRow(
-                    column(4,sliderInput("plotheightG1","plotheightG1",1000,6000,1000,500))
+                    column(4,sliderInput("plotheightG1","plotheightG1",1000,6000,1000,500)),
+                    column(4,selectInput("cellStudy","Select cell study",c("xp_1","xp_2","xp_3"),selected=1:3,multiple=TRUE))
                   )
                   ),#endG1 tab,
                   
@@ -522,7 +535,8 @@ ui<-fluidPage(
                                          tabPanel("moduleNodesMM",DT::dataTableOutput('moduleNodesMM')),
                                          tabPanel("moduleEdgesMM",DT::dataTableOutput('moduleEdgesMM')),
                                          tabPanel("wgcna",plotOutput("wgcnacol")),
-                                         tabPanel("Virtual Cells",plotOutput("gigamat2")))
+                                         tabPanel("Virtual Cells",plotOutput("gigamat2")),
+                                         tabPanel("Ratio Farm",plotOutput("ratioFarm")))
                              
                     )
                     
@@ -1652,7 +1666,17 @@ server <- shinyServer(function(input, output) {
      for (xcm in 1:length(xc)){
        datamatrix[names(xc[xcm][[1]]),names(xc)[xcm]]<-as.numeric(unlist(xc[xcm]))
      }
+     
+     #more subsetting based on study
+     print("input$cellStudy")
+     print(input$cellStudy)
+     print(str(input$cellStudy))
+     print("grep(paste(input$cellStudy,collapse='|'),colnames(datamatrix))")
+     print(grep(paste(input$cellStudy,collapse="|"),colnames(datamatrix)))
+     datamatrix<-datamatrix[,grep(paste(input$cellStudy,collapse="|"),colnames(datamatrix))]
+     
      print("debug2")
+     
      datamatrix[is.na(datamatrix)]<-0
      breaksvals<-max(abs(datamatrix))
      tv2<-apply(datamatrix,1,function(ff){max(abs(ff),na.rm=TRUE)})>slider1()
@@ -1661,9 +1685,15 @@ server <- shinyServer(function(input, output) {
      tv3[is.na(tv3)]<-0
      plotMatrix<-datamatrix[as.logical(tv2),as.logical(tv3)]
      print("debug3")
+     
+     
+     
      #cex calculation
      cexval1<-3*sqrt(28/ncol(plotMatrix))
      cexval2<-2*sqrt(120/nrow(plotMatrix))
+     
+    
+     
      
      #new
      pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2,main=paste("Study:",names(studies)[reacstudy],"Set:",setlistnameslist[[reacstudy]][reacset],"Edge:",reacedge,"PW filter:",sprintf("%.3f",slider1()),"Cell filter:",sprintf("%.3f",slider2())))
@@ -1906,13 +1936,18 @@ server <- shinyServer(function(input, output) {
      yxt<-nrow(allmat2.col)
      xxt<-ncol(allmat2.col)
      #print(allmat2.col)
-     plot(c(0, 1.5*xxt), c(0, 1.5*yxt), type = "n", xlab = "", ylab = "",frame=FALSE,axes=FALSE)
-     #axis(2, at=1:xxt-0.5, labels=rownames(allmat2.col),las=2,cex.axis=.6)
-     #axis(1, at=1:yxt, labels=colnames(allmat2.col),cex.axis=.6,las=2)
-     i <-1:xxt
-     for(j in 1:yxt){
-       rect(i, j, i+1, j+1, col=allmat2.col[j,],border="white",lwd=.25 )
-     }
+     # plot(c(0, 1.5*xxt), c(0, 1.5*yxt), type = "n", xlab = "", ylab = "",frame=FALSE,axes=FALSE)
+     # axis(2, at=1:xxt-0.5, labels=colnames(allmat2.col),las=2,cex.axis=.6)
+     # axis(1, at=1:yxt, labels=rownames(allmat2.col),cex.axis=.6,las=2)
+     # i <-1:xxt
+     # for(j in 1:yxt){
+     #   rect(i, j, i+1, j+1, col=allmat2.col[j,],border="white",lwd=.25 )
+     # }
+     print(allmat2.col)
+     image(t(allmat2[den.ord2,den.ord]),col=t(allmat2.col),axes=FALSE,xlab="",ylab="")
+     axis(1, at = 1:ncol(allmat2.col), labels=colnames(allmat2.col),tick=FALSE)
+     axis(4, at = 1:nrow(allmat2.col), labels=rownames(allmat2.col),tick=FALSE)
+     
    })
    
    output$igraph<-renderPlot({
@@ -2328,6 +2363,45 @@ server <- shinyServer(function(input, output) {
   observe({output$gigamat2 <- renderPlot({
      plotInputGigamat2()
    },height=as.numeric(input$plotheightG2))
+  })
+  
+  output$ratioFarm<-renderPlot({
+    usematrix<-usematrixfun()
+    usematrix<-usematrix[order(usematrix[,2]),]
+    usematrix<-usematrix[order(usematrix[,1]),]
+    print("begin loop")
+    print(usematrix)
+    
+    edgenames<-1:5
+    squarenames<-rownames(datasetmatrix)
+    cellnames3
+    
+    dfr<-matrix(ncol=length(cellnames3),nrow=nrow(usematrix),data=NA)
+    colnames(dfr)<-cellnames3
+    rownamesdfr<-c()
+    for (row in 1:nrow(usematrix)){
+      sq<-squarenames[usematrix[row,1]]
+      ed<-edgenames[usematrix[row,2]]
+      query=paste("MATCH (c:cellprop) WHERE c.square='",sq,"' AND c.edge=",ed," RETURN c.name AS name, c.ratio AS ratio",sep="")
+      res<-cypher(graph,query)
+      print(res)
+      dfr[row,res$name]<-res$ratio
+      rownamesdfr<-c(rownamesdfr,paste(sq,ed,sep="_"))
+    }
+    rownames(dfr)<-rownamesdfr
+    dfr[is.na(dfr)]<-1
+    dfr[dfr==0]<-0.000001
+    dfr<-log2(dfr)
+    print(dfr)
+    dfr<-dfr[,colSums(dfr)!=0]
+    print(dfr)
+    dfr[dfr>3]<-3
+    dfr[dfr<(-3)]<-(-3)
+    breaksvals<-max(abs(dfr))
+    print(dfr)
+    #breaksvals<-
+    pheatmap(dfr,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61))
+    
   })
   
   plotInputMachines<-reactive({

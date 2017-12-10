@@ -5,81 +5,6 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
   if(class(dataM)=="LumiBatch"){data.v<-lumiT(dataM,simpleOutput=FALSE)}else{data.v<-lumiT(dataM,simpleOutput=FALSE,method="log2")}
   data.q<-lumiN(data.v,method="quantile")
   pd<-pData(data.q)
-  # if(study=="Berry"){
-  #   subsets<-list(pd$sex=="Female",pd$sex=="Male",pd$class=="notActiveTB",pd$class=="activeTB",pd$class=="activeTB"|pd$class=="notActiveTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square1"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class3=="notActiveTB",pd$class3=="activeTB",pd$class3=="activeTB"|pd$class3=="notActiveTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square2"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="CON_healthy",pd$class=="CON_LTBI",pd$class=="CON_LTBI"|pd$class=="CON_healthy")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square3"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="CON_PTB",pd$class=="TBPC",pd$class=="TBPC"|pd$class=="CON_PTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square4"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$Compartment=="blood",pd$Compartment=="fluid",pd$Compartment=="blood"|pd$Compartment=="fluid")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square5"){
-  #   subsets<-list(pd$ECP=="Eff",pd$ECP=="EC",pd$Compartment=="blood",pd$Compartment=="fluid",pd$Compartment=="blood"|pd$Compartment=="fluid")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "square6"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="CON_LTBI",pd$class=="CON_PTB",pd$class=="CON_PTB"|pd$class=="CON_LTBI")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "rec1"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="CON_healthy",pd$class=="CON_PTB",pd$class=="CON_PTB"|pd$class=="CON_healthy")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="IMPI" & squareM == "rec2"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="CON_healthy",pd$class=="TBPC",pd$class=="TBPC"|pd$class=="CON_healthy")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="Chong" & squareM == "SLE5"){
-  #   subsets<-list(pd$set=="train",pd$set=="test",pd$class=="control",pd$class=="DLE",pd$class=="control"|pd$class=="DLE")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="Chiche" & squareM == "SLE1"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$stageName=="control",pd$stageName=="inactiveSLE",pd$stageName=="control"|pd$stageName=="inactiveSLE")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="Chiche" & squareM == "SLE6"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$stageName=="control",pd$stageName=="activeSLE",pd$stageName=="control"|pd$stageName=="activeSLE")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="Chiche" & squareM == "SLE2"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$stageName=="inactiveSLE",pd$stageName=="activeSLE",pd$stageName=="control"|pd$stageName=="activeSLE")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="Chiche" & squareM == "SLE7"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$group=="control",pd$group=="SLE",pd$group=="control"|pd$group=="SLE")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  #   
-  # }else if (study=="HE" & squareM == "HErec1"){
-  #   subsets<-list(pd$Sex=="F",pd$Sex=="M",pd$CLASS2=="NIL",pd$CLASS2=="ACT",pd$CLASS2=="NIL"|pd$CLASS2=="ACT")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  #   
-  # }else if (study=="EU" & squareM == "EUrec3"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="LTBI",pd$class=="OD",pd$class=="LTBI"|pd$class=="OD")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="EU" & squareM == "EUrec4"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="OD",pd$class=="PTB",pd$class=="OD"|pd$class=="PTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="EU" & squareM == "EUsquare6"){
-  #   subsets<-list(pd$HIV.Status=="negative",pd$HIV.Status=="positive",pd$class=="LTBI",pd$class=="PTB",pd$class=="LTBI"|pd$class=="PTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="EU" & squareM == "EUsquare6MF_neg"){
-  #   subsets<-list(pd$gend=="F",pd$gend=="M",pd$class=="LTBI",pd$class=="PTB",pd$class=="LTBI"|pd$class=="PTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="EU" & squareM == "EUsquare6MF_pos"){
-  #   subsets<-list(pd$gend=="F",pd$gend=="M",pd$class=="LTBI",pd$class=="PTB",pd$class=="LTBI"|pd$class=="PTB")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # 
-  # }else if (study=="HIV"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$class=="Healthy",pd$class=="HIV",pd$class=="Healthy"|pd$class=="HIV")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="malaria"){
-  #   subsets<-list(pd$sex=="F",pd$sex=="M",pd$malaria.class=="asymptomatic",pd$malaria.class=="symptomatic",pd$malaria.class=="asymptomatic"|pd$malaria.class=="symptomatic")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }else if (study=="respVir"){
-  #   subsets<-list(pd$sex=="female",pd$sex=="male",pd$time=="Baseline",pd$time=="Day0",pd$time=="Baseline"|pd$time=="Day0")
-  #   subset=subsets[[as.numeric(edgeM)]]
-  # }
-  
-  ##New subsets
   
   #pseudo classvar2:control, classvar2:cases, classvar1:control, classvar1:case, classvar1:control|classvar1:case
   query<-paste("MATCH (n:wgcna {square:'",squareM,"', name:'blue'}) RETURN n.edge AS edge, n.contrastvar AS contrastvar, n.contrast AS contrast",sep="")
@@ -92,8 +17,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
   c2case<-unlist(strsplit(res$contrast[3]," - "))[1]
   subsets<-eval(parse(text=paste("list(pd$",classvar2,"=='",c2con,"',pd$",classvar2,"=='",c2case,"',pd$",classvar1,"=='",c1con,"',pd$",classvar1,"=='",c1case,"',pd$",classvar1,"=='",c1con,"'|","pd$",classvar1,"=='",c1case,"')",sep="")))
   subset=subsets[[as.numeric(edgeM)]]
-  ##end new subsets
-  
+ 
   data.qs<-data.q[,subset]
   
   #get nuIDs for module probes
@@ -103,15 +27,17 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
   turq.data<-exprs(data.qs)[nuIDs$nuID,]
   if (prod(dim(turq.data)) != 0){
     print("cormat")
+    print(dim(turq.data))
     cormat<-cor(t(turq.data),method="pearson")
     print("begin clustering")
-    clustres<-fastcluster::hclust(dist(cormat))
+    clustres<-fastcluster::hclust(dist(cormat),method='ward.D2')
     print("begin dendro")
     dendro.manual<-as.dendrogram(clustres)
     print("begin ordering")
     idvec<-order.dendrogram(dendro.manual)
     dimnames(cormat)<-list(NULL,NULL)
     print("end clustering")
+    print(dim(cormat))
     
     #generate annotation matrices
     #CELLS
@@ -147,6 +73,10 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
       pw<-pw[1:numpw]
       pwlist<-pwlist[which(pwlist$pathway%in%pw),]
     }
+    print("numpw")
+    print(numpw)
+    
+    if(numpw>3){
     pwmatrix<-matrix(nrow=nrow(cormat),ncol=numpw,data=0)
     dimnames(pwmatrix)<-list(nuIDs$nuID,pw)
     
@@ -182,7 +112,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     res<-annHeatmap2(cormat,
                      dendrogram=list("status"="hidden","dendro"=dendro.manual),
                      annotation=list(
-                       Row=list("data"=cellmatrix,"asIs"=TRUE,control=list(cex=2,boxh=2)),
+                       Row=list("data"=cellmatrix,"asIs"=TRUE,control=list(boxh=2)),
                        Col=list("data"=total,"asIs"=TRUE,control=list("pch"=16,"col.pch"=mcolvec2[idvec,2],numfac=4))
                      ),
                      legend=TRUE,
@@ -190,7 +120,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
                      scale="none"
                      #labels=list(Row=list(cex=cexval),Col=list(cex=cexval)),
                      
-    )
+    ) 
     #res<-annHeatmap2(cormat,dendrogram=list("status"="hidden","dendro"=dendro.manual),legend=TRUE,col=blueWhiteRed,scale="none",annotation=list(Row=list("data"=cellmatrix,"asIs"=TRUE,Col=list("data"=total,"asIs"=TRUE,control=list("pch"=16,"col.pch"=mcolvec2[idvec,2],numfac=4)))))
     
     #plot(res,widths=c(6,1),heights=c(6,1))
@@ -199,15 +129,19 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     res2<-res
     print("layout")
     res2$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
+    #res2$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
+    #res2$layout$plot<-matrix(c(0,4,0,0,1,2,0,3,0),ncol=3,dimnames=list(c("","image","rowAnn"),c("leg2","image","colAnn")))
     print("actual plot")
     #plot(res2,widths=c(1.8,1,4,1)/2,heights=c(1.5,4,1.5*(numpw/sqrt(numpw)))/2)
-    plot(res2,widths=c(1.5,.5,4,1)/2,heights=c(2,4,1.5*(numpw/sqrt(numpw)))/2)
+    #plot(res2,widths=c(1.5,.5,3,1)/2,heights=c(1,3,1.0*(numpw/sqrt(numpw)))/2)
+    plot(res2,widths=c(1,0.5,3,.8)/2,heights=c(1,4.5,1.0*(numpw/sqrt(numpw)))/3)
     plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
-    text(-9,10,paste(squareM,"edge:",edgeM),cex=2.0,pos=4,xpd=NA)
-    text(-9,9,paste("module:",moduleM),cex=2.0,pos=4,xpd=NA)
-    text(-9,8,paste("modAUC1:",sprintf("%.3f",wa$modAUC1)),cex=2,pos=4,xpd=NA)
-    text(-9,7,paste("modAUC2:",sprintf("%.3f",wa$modAUC2)),cex=2,pos=4,xpd=NA)
-    text(-9,6,paste("diffME:",sprintf("%.3f",wa$diffME)),cex=2,pos=4,xpd=NA)
-    text(-9,5,paste("sigenrich:",sprintf("%.3f",wa$sigenrich)),cex=2,pos=4,xpd=NA)
-  }#end turq.data dimension check
+    text(-5,10,paste(squareM,"edge:",edgeM),cex=2.0,pos=4,xpd=NA)
+    text(-5,9,paste("module:",moduleM),cex=2.0,pos=4,xpd=NA)
+    text(-5,8,paste("modAUC1:",sprintf("%.3f",wa$modAUC1)),cex=2,pos=4,xpd=NA)
+    text(-5,7,paste("modAUC2:",sprintf("%.3f",wa$modAUC2)),cex=2,pos=4,xpd=NA)
+    text(-5,6,paste("diffME:",sprintf("%.3f",wa$diffME)),cex=2,pos=4,xpd=NA)
+    text(-5,5,paste("sigenrich:",sprintf("%.3f",wa$sigenrich)),cex=2,pos=4,xpd=NA)
+    }#end final numpw check
+    }#end turq.data dimension check
 }#end function
