@@ -313,9 +313,9 @@ ui<-fluidPage(
                   h3("Datasets",style="color:#FF0000"),
                   fluidRow(
                   column(4,uiOutput("allsubsetnames")),
-                  
-                  column(4,selectInput("matchedset","Choose matchedset",c("Q_9_blood.PCF.defTB","Q_10_blood.PCF.probTB","Q_11_blood.PCF.defPC","Q_12_blood.PCF.probPC","Q_13_blood.PCF.HIVneg","Q_14_blood.PCF.HIVpos","Q_15_blood.PCF.HIVposHD"),selected="Q_9_blood.PCF.defTB",multiple=FALSE),offset=.33)
-                  #column(4,selectInput("matchedset","Choose matchedset",c("Q_6_IMPI.TBPC.BF"),selected="Q_6_IMPI.TBPC.BF",multiple=FALSE),offset=.33)#GBP
+                  #column(4,selectInput("doIntracor","intracor?",c(FALSE,TRUE),selected=FALSE,multiple=FALSE)),
+                  #column(4,selectInput("matchedset","Choose matchedset",c("Q_9_blood.PCF.defTB","Q_10_blood.PCF.probTB","Q_11_blood.PCF.defPC","Q_12_blood.PCF.probPC","Q_13_blood.PCF.HIVneg","Q_14_blood.PCF.HIVpos","Q_15_blood.PCF.HIVposHD"),selected="Q_9_blood.PCF.defTB",multiple=FALSE),offset=.33)
+                  column(4,selectInput("matchedset","Choose matchedset",c(matchedsets),selected=matchedsets[1],multiple=FALSE),offset=.33)#GBP
                   
                   ),
                   fluidRow(
@@ -395,7 +395,7 @@ ui<-fluidPage(
                   
                   tabPanel("Virtual Cells",
                            tags$head(tags$style("#cellcor{height:90vh !important;overflow-y: scroll}")),
-                           tags$head(tags$style("#gigamat{height:90vh !important;overflow-y: scroll}")),
+                           tags$head(tags$style("#cellmatrix{height:90vh !important;overflow-y: scroll}")),
                            tags$head(tags$style("#gigabar{height:80vh !important;}")),
                   h3(paste('Single Cell'),style="color:#FF0000"),
                            # fluidRow(
@@ -465,8 +465,11 @@ ui<-fluidPage(
                     column(3,sliderInput("legendcex1","legend size adjustment",0.5,2,1,0.001)),
                     column(3,sliderInput("vertexsize1","vertex size",2,30,15,0.1))
                   ),
+                  fluidRow(
+                    column(4,sliderInput("plotheightMeta","plotheightMeta",500,1500,700,150))
+                  ),
                   
-                  h3(paste('Gigamatrix2:',project),style="color:#FF0000"),
+                  h3(paste('CellMatrix:',project),style="color:#FF0000"),
                   #DT::dataTableOutput('x1'),
                   # fluidRow(
                   #   column(12,DT::dataTableOutput('x2'))),
@@ -487,7 +490,8 @@ ui<-fluidPage(
                 
                 
                 ),#end sidebar
-                if(doIntracor==TRUE){mainPanel(
+                
+                mainPanel(
                   tabsetPanel(
                     #BXP
                     tabPanel("Gene",
@@ -522,20 +526,21 @@ ui<-fluidPage(
                     tabPanel("Virtual Cells",
                              tabsetPanel("cellcor",
                                          tabPanel("Single Cell",plotOutput("cellcor")),
-                                         tabPanel("Cell Matrix",plotOutput("gigamat")),
+                                         tabPanel("Cell Matrix",uiOutput("cellmatrix")),
                                          tabPanel("Cell and pathway summary",plotOutput("gigabar"))
                              )),
                     
                     
                     tabPanel("Meta-Analysis",
                              tabsetPanel("Chaussabel",
-                                         tabPanel("ModuleMeta",plotOutput("pheat")),
+                                         #tabPanel("ModuleMeta",plotOutput("pheat")),
+                                         tabPanel("ModuleMeta",uiOutput("plot.pheat")),
                                          tabPanel("igraph",plotOutput("igraph")),
                                          tabPanel("d3graphMM",forceNetworkOutput("d3graphMM",width="100%",height="100%")),
                                          tabPanel("moduleNodesMM",DT::dataTableOutput('moduleNodesMM')),
                                          tabPanel("moduleEdgesMM",DT::dataTableOutput('moduleEdgesMM')),
                                          tabPanel("wgcna",plotOutput("wgcnacol")),
-                                         tabPanel("Virtual Cells",plotOutput("gigamat2")),
+                                         tabPanel("Virtual Cells",uiOutput("cellmatrixMeta")),
                                          tabPanel("Ratio Farm",plotOutput("ratioFarm")))
                              
                     )
@@ -543,55 +548,7 @@ ui<-fluidPage(
                     
                     
                     ,selected="Single module")
-                )}else{mainPanel(
-                  tabsetPanel(
-                    tabPanel("SP",
-                             tabsetPanel("SP",
-                                         tabPanel("module2d",plotOutput("module2d")),
-                                         tabPanel("subjectPlot",plotOutput("subjectplot")),
-                                         tabPanel("modPheno",plotOutput("modPheno")),
-                                         tabPanel("d3graphSP",forceNetworkOutput("d3graphSP",width="100%",height="100%")),
-                                         tabPanel("moduleNodesSP",DT::dataTableOutput('moduleNodesSP')),
-                                         tabPanel("moduleEdgesSP",DT::dataTableOutput('moduleEdgesSP')),
-                                         #tabPanel("intracor",plotOutput("intracor")),
-                                         tabPanel("projections",plotOutput("projections")),
-                                         tabPanel("sankey",sankeyNetworkOutput("sankey")),
-                                         tabPanel("MEvar",plotOutput("MEvar")))),
-                    tabPanel("modcor",
-                             tabsetPanel("modcor",
-                                         tabPanel("modcor",plotOutput("modcor"))
-                             )),
-                    tabPanel("cellcor",
-                             tabsetPanel("cellcor",
-                                         tabPanel("cellcor",plotOutput("cellcor"))
-                             )),
-                    tabPanel("G1",
-                             tabsetPanel("G1",
-                                         tabPanel("Gigamat1",plotOutput("gigamat")),
-                                         tabPanel("barplot",plotOutput("gigabar")))),
-                    #BXP
-                    tabPanel("BXP",
-                             tabsetPanel("BXP",
-                                         tabPanel("boxplot",plotOutput("boxplot")),
-                                         tabPanel("detableBXP",DT::dataTableOutput('detableBXP'))
-                             )
-                             
-                    ),
-                    tabPanel("MM",
-                             tabsetPanel("MM",
-                                         tabPanel("ModuleMeta",plotOutput("pheat")),
-                                         tabPanel("igraph",plotOutput("igraph")),
-                                         tabPanel("d3graphMM",forceNetworkOutput("d3graphMM",width="100%",height="100%")),
-                                         tabPanel("moduleNodesMM",DT::dataTableOutput('moduleNodesMM')),
-                                         tabPanel("moduleEdgesMM",DT::dataTableOutput('moduleEdgesMM')),
-                                         tabPanel("wgcna",plotOutput("wgcnacol")))),
-                    #G2
-                    tabPanel("G2",plotOutput("gigamat2")),
-                    #Machines
-                    tabPanel("Machines",plotOutput("inflammasomes"))
-                  )
                 )
-                }
                   
               )
 )
@@ -644,6 +601,7 @@ server <- shinyServer(function(input, output) {
    slider2<-reactive({input$slidercell})
    barfilterfun1<-reactive({input$barfilter1})
    barfilterfun2<-reactive({input$barfilter2})
+   plotheightCM<-reactive({input$plotheightG1})
    #BXP
    setfunBXP<-reactive({input$BXPset})
    orderPfun<-reactive({input$orderP})
@@ -654,6 +612,7 @@ server <- shinyServer(function(input, output) {
    #MM
    useallsame<-reactive({input$allsame})
    usediff<-reactive({input$different})
+   plotheightM<-reactive({input$plotheightMeta})
    
    #igraph_plotter controls single module and bipartite
    layoutfun<-reactive({input$layout})
@@ -1763,10 +1722,20 @@ server <- shinyServer(function(input, output) {
      
    })
    
-   observe({output$gigamat<-renderPlot({
+   # observe({output$gigamat<-renderPlot({
+   #   plotInputGigamat1()
+   #   
+   # },height=as.numeric(input$plotheightG1))})
+   output$cellmatrix <- renderUI({
+     plotOutput("gigamat", height = as.numeric(input$plotheightG1))
+     #plotOutput("gigamat", height = 7000)
+   })
+   
+   output$gigamat <- renderPlot({
      plotInputGigamat1()
-     
-   },height=as.numeric(input$plotheightG1))})
+   })
+   
+   
    
    
    output$gigabar<-renderPlot({
@@ -1805,6 +1774,7 @@ server <- shinyServer(function(input, output) {
    })
    
    #MM
+   
    plotInput <- reactive({
      usematrix<-usematrixfun()
      usematrix<-usematrix[order(usematrix[,2]),]
@@ -1897,12 +1867,30 @@ server <- shinyServer(function(input, output) {
      if(returncsvfun()){
        print("writing table")
        write.csv(tableres,file.path(tabledir,paste("CMA",paste(rownames(allmat3),collapse="_"),".csv",sep="")))}#Chaussabel Module Annotation
+    
+     
+     
      return(modulelist) 
    })
+  
    
-   output$pheat <- renderPlot({ 
-     plotInput()
-   })
+   # #semiworking:
+   #  observeEvent(input$plotheightMeta,{
+   #    plotheightMvalue<-as.numeric(plotheightM())
+   #    output$pheat <- renderPlot({
+   #      plotInput()
+   #        },height=plotheightMvalue)
+   # })
+   
+    output$plot.pheat <- renderUI({
+      plotOutput("pheat", height = input$plotheightMeta)
+    })
+    
+    output$pheat <- renderPlot({
+      plotInput()
+    })
+    
+    
    
    output$wgcnacol<-renderPlot({
      usematrix<-input$x1_cells_selected
@@ -2360,10 +2348,14 @@ server <- shinyServer(function(input, output) {
      }
    })
    
-  observe({output$gigamat2 <- renderPlot({
-     plotInputGigamat2()
-   },height=as.numeric(input$plotheightG2))
+  output$cellmatrixMeta <- renderUI({
+    plotOutput("Gigamat2", height = as.numeric(input$plotheightG2))
   })
+  
+  output$Gigamat2 <- renderPlot({
+    plotInputGigamat2()
+  })
+  
   
   output$ratioFarm<-renderPlot({
     usematrix<-usematrixfun()

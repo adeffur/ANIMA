@@ -409,8 +409,8 @@ figure<-1
   # }#end if
     
     ##new
-    #if ((q.i==1 & i==1)|(q.i==4 & i==1)) {#debug; hardcoded
-    if ((q.i==1 & i==1)|(q.i==9 & i==1)) {#debug; hardcoded #current GBP
+    if ((q.i==1 & i==1)|(q.i==4 & i==1)) {#debug; hardcoded #IMPI
+    #if ((q.i==1 & i==1)|(q.i==9 & i==1)) {#debug; hardcoded #current GBP
       
       nodes<-RNeo4j::nodes
       
