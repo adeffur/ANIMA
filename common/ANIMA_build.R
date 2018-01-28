@@ -1,59 +1,11 @@
 #initial text#### 
   #Run checklist
     #fresh session
-    #previous neo4j database backed up
-    #no debug statements 
+    #no debug flags 
     #neoinsert is on
 
-#fixed: ratio order in flat cellprop ratios
-#fixed: probetype mapping for question 1 and 4
-#fixed: double mapsTo relationships for (probe)-[:mapsTo]-(gene): CREATE replaced with MERGE
+#Intro text
 
-##TO DO####
-  #URGENT:  
-  #fix levs to always have cases first, then controls, in BOTH dimensions (TB and HIV/sex), otherwise cell ratios are weird (factor levels are usually alphabetic, maybe simply use "pericardial fluid" and "whole blood"; this will result in better labels too)
-  #database index to speed up writing. Use pathway1 and pathway2 variables!
-  #make PBMC subset and make barplot comparisons by PBMC subset with stats (also send to neo4j as PBMC_ratio)
-  #implement better ha2 cell-type enrichment analysis (based on nuID rather than gene symbols; code in rcypher)
-  #fix cypher query for interprobe netowrks; way too expensive; also fix index if needed
-  #put into WGCNA all cell-specific probes regardless of fc and variability (i.e. make a list of probes that always have to be there; cellprobes)
-  #!!!!SOME PROBES DO NOT MAP TO WGCNA MODULES (it is because of tv at the wgcna step)
-
-  #sort phenodata csv file correctly so that wgcna plots are more meaningful - DONE
-  #fix platform when mapping PROBETYPE-SYMBOL relationships - DONE
-  #new phenodata to be used with new version of impi data, where ldh is now in a single column - DONE
-  #use revised matrixPD
-    #use same phenodata for square1 and square4 - Applied
-    #add extra datastructure for immunology data, and do separate correlation analyis (this will add another node type and network)
-  #neo4j code: check where to use match and create vs merge, may speed things up - Applied
-  #need to allocate more heap space to Cytoscape java rpc, and overall to VM - Applied
-  
-  #implement fix for cell to cellex mapping as current one is incomplete (check that new csv file works) -- seems to...
-  #link pathway genes (starting with reactome) using graphite
-   
-  #WGCNA do a matplot and ME superimposed - DONE
-  #CEGS
-  #Map CEGS probes to CEGS
-  #CEGS correlation
-  #CEGS ME
-  #CEGS ME correlation
-  #gr
-  #Add flow data to test set...this could be 2 networks: flow-cellprop and wgcna-flow - DONE
-
-##TO DO MAJOR##
-  #Main loop: add flattened squares as extra edges - DONE
-  #Merge in IMPI-MA data - DONE
-  #Harmonise phenodata handling between datasets
-  #add extra pheno data for certain subsets (e.g. SET1)
-  #Implement non-redunant orthogonal annotaion space strategy (e.g. GO, KEGG, InterPRO)
-    #Annotation pipelines in R
-      #Singular
-        #DAVID:DAVIDQuery
-      #Gene-set enrichment
-        #GSEABase
-        #gage
-      #Modular
-  #sigenrich with phyper
 
 #Setup####
 
