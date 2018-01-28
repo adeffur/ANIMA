@@ -55,6 +55,7 @@
   }
 
 #Switch Cytoscape on/off
+  #This requires a separate Cytoscape image/ container. This is not presently supported in this release of ANIMA_build
   cytoscapelink<-"off"
 #Reduce pheno
   reducePheno<-FALSE
@@ -126,7 +127,11 @@ source(file.path(dir.data_root,"questions.R")) #this is specific to the project;
 #q.i<-4 #debug
 #q.i<-5 #debug
 #for (q.i in c(6,7,8)){#debug on!
-#real outer loop 
+
+#make empty platforms vector  
+platforms<-c()
+
+#outer loop (production) 
 for (q.i in 1:length(questions)){
 
 #Definitions for the current question####
@@ -326,47 +331,14 @@ figure<-1
  
   #DEBUG: commented out
   if (neoinsert=="on"){
-  # if ((q.i==1 & i==1)|(q.i==4 & i==1)) {#debug; hardcoded
-  # 
-  #   nodes<-RNeo4j::nodes
-  #   #network-specific cypher query
-  #   query = "
-  #   CREATE (probe:PROBETYPE {name:{nuID},platform:{plat}})
-  #   MERGE (gene:SYMBOL {name:{targetID}})
-  #   CREATE (probe)-[:mapsTo]->(gene)
-  #   "
-  #   blocks<-split(1:nrow(probemap),ceiling(seq_along(1:nrow(probemap))/1000))
-  #   platform = getChipInfo(datalist[[1]])$chipVersion[1]
-  #   
-  #   for (block in blocks){
-  #   t = suppressMessages(newTransaction(graph))
-  #   graphdata=probemap[block,]
-  #   for (rowd in 1:nrow(graphdata)) {
-  #     probe = as.character(graphdata[rowd, ]$nuID)
-  #     gene = as.character(graphdata[rowd, ]$SYMBOL)
-  #     
-  #       
-  #     suppressMessages(appendCypher(t, 
-  #                  query, 
-  #                  nuID = probe, 
-  #                  targetID = gene,
-  #                  plat = platform
-  #     ))
-  #   }
-  #   
-  #   print("committing :)")
-  #   suppressMessages(commit(t))
-  #   }#end blocks
-  #   #END NEO4J
-  # }#end if
-    
-    ##new
-    if ((q.i==1 & i==1)|(q.i==4 & i==1)) {#debug; hardcoded #IMPI
+  
+    #if ((q.i==1 & i==1)|(q.i==2 & i==1)) {#debug; hardcoded #IMPI
     #if ((q.i==1 & i==1)|(q.i==9 & i==1)) {#debug; hardcoded #current GBP
       
-      nodes<-RNeo4j::nodes
+    nodes<-RNeo4j::nodes
+    platform = getChipInfo(datalist[[i]])$chipVersion[1]
       
-      platform = getChipInfo(datalist[[i]])$chipVersion[1]
+    if (!(platform%in%platforms)){
       write.csv(probemap,"./tmp.csv")
       
       if (class(datalist[[i]])=="LumiBatch"){
@@ -378,11 +350,8 @@ figure<-1
       }
       
       
-      #END NEO4J
     }#end if
-    #endnew
-    
-    
+    platforms<-c(platform,platforms)
   }#end neoinsert if
   
 #1_Phenodata analysis####
@@ -409,9 +378,7 @@ figure<-1
   #Save phenodata for the given dataset
   write.csv(pd2,file=file.path(dir.results,paste("PhenoData",dataset.names[[i]],".csv",sep="")))
   
-  #TO DO: project-specific varclass encoded in questions, or separate file (matrixPD)
-  #TO DO: project-specific matrixPD.csv encodes which variables are to be used in which question. There could be a default.
-
+  
     pdm2<-read.csv(file.path(dir.data_root,matrixPDname),row.names=1,stringsAsFactors = FALSE)
     pd3<-pd2[,pdm2[dataset.variables[[i]],]==1]
     write.csv(pd3,file=file.path(dir.results,paste("PhenoData_short",dataset.names[[i]],".csv",sep="")))
@@ -585,22 +552,13 @@ write.csv(resultmat,file=file.path(dir.results,"pd3num_inner_pvals.csv"))
 
 ##2_Expression data: preprocessing ************************####
 
-#TO DO: make platform-specifc preprocessing
-#IlluminaHT12v3
-#IlluminaHT12v4
-#Affy
-#RT-PCR
-
-#in loop, source this pre-processing pipeline (specify in questions.R which preprocessing and DE pipelines to use; the output is ranked gene lists written to Neo4j and used to make inputs for WGCNA)
-#raw - transform - normalize - filter
-
 analysis="2_Preprocessing"
 an.count<-2
 figure<-1
 print("Analysis 2: Preprocessing")
 
 #make relevant output folders
-## Define folder for storing results NB do this for each analysis
+## Define folder for storing results
 dir.results <- file.path(dir.output.version,paste("Q_",q.i,"_",dataset.variables,sep=""),analysis, "results")
 ## Define folder for saving figures
 dir.figures <- file.path(dir.output.version,paste("Q_",q.i,"_",dataset.variables,sep=""),analysis, "figures")
@@ -666,15 +624,8 @@ figure<-figure+1
 
 #MDS all probes
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_all_samples_by_',contrast.variable1,'.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
 plotSampleRelationsAD(datalist[[i]],method="mds",color=as.character(classcolours1[[i]]),plotchar=16)
-# legend("bottomleft",
-#        levels(classfactor1[[i]]),
-#        pch=16,
-#        col=levels(classcolours1[[i]]),
-#        cex=.9
-# )
 legend("bottomleft",
        legendcolours1[,1],
        pch=16,
@@ -684,36 +635,9 @@ legend("bottomleft",
 dev.off()
 figure<-figure+1
 
-# ##removeBatchEffect
-# batch=factor(pData(datalist[[i]])$study)
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_all_samples_by_',contrast.variable1,'.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
-# plotSampleRelationsAD(removeBatchEffect(datalist[[i]],batch),method="mds",color=as.character(classcolours1[[i]]),plotchar=16)
-# # legend("bottomleft",
-# #        levels(classfactor1[[i]]),
-# #        pch=16,
-# #        col=levels(classcolours1[[i]]),
-# #        cex=.9
-# # )
-# legend("bottomleft",
-#        legendcolours1[,1],
-#        pch=16,
-#        col=legendcolours1[,2],
-#        cex=.9
-# )
-# dev.off()
-# figure<-figure+1
-# 
-# 
-# ##end
-
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_all_samples_by_',contrast.variable2,'.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
 plotSampleRelationsAD(datalist[[i]],method="mds",color=as.character(classcolours2[[i]]),plotchar=16)
-# legend("bottomleft",
-#        levels(classfactor2[[i]]),
-#        pch=16,
-#        col=levels(classcolours2[[i]]),
-#        cex=.8
-# )
+
 legend("bottomleft",
        legendcolours2[,1],
        pch=16,
@@ -742,7 +666,6 @@ figure<-figure+1
 
 #PCA all probes
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_all_samples_by_',contrast.variable1,'.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
 spca <- SamplePCA(exprs(datalist[[i]]), classfactor1[[i]])
 plot(spca, col=legendcolours1[,2],main=paste(nrow(exprs(datalist[[i]]))," probes"))#,cex=2,cex.axis=2,cex.main=3,cex.lab=2.5,pch=16)
@@ -804,6 +727,7 @@ for (edge in 1:length(edges)){
 par(mfrow=c(1,1))
 dev.off()
 figure<-figure+1 
+
 #preprocess####
 
 #Variance stabilising transformation or log2 transformation
@@ -825,7 +749,7 @@ for (edge in 1:length(edges)){
 #Quantile normalise
 data.q<-lumiN(data.v,method="quantile")
 data.q.edges<-list()
-#by edge; this is not used anywhere
+#by edge; this is not used anywhere...
 for (edge in 1:length(edges)){
   data.q.edges[[edge]]<-lumiN(data.v.edges[[edge]],method="quantile")
 }
@@ -872,7 +796,7 @@ dev.off()
 figure<-figure+1
 
 #MDS all probes (normalised)
-#FIXREQ
+
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_all_samples_by_',contrast.variable1,'_normalised.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
 plotSampleRelationsAD(data.q,method="mds",color=as.character(classcolours1[[i]]),plotchar=16)
 legend("bottomleft",
@@ -912,7 +836,6 @@ dev.off()
 
 #PCA all probes (normalised)
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_all_samples_by_',contrast.variable1,'_normalised.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
 spca <- SamplePCA(exprs(data.q), classfactor1[[i]])
 plot(spca, col=legendcolours1[,2],main=paste(nrow(exprs(data.q))," probes (normalised)"))#,cex=2,cex.axis=2,cex.main=3,cex.lab=2.5,pch=16)
@@ -975,9 +898,12 @@ for (edge in 1:length(edges)){
 par(mfrow=c(1,1))
 dev.off()
 figure<-figure+1
+
 #filter####
 
-#Filter 1 for HT12v3
+#Remove low-quality probes from the analysis
+
+##########Filter 1 for HT12v3
 #generate filter based on probe quality
 x <- pqlist[[i]]
 mapped_probes <- mappedkeys(x)
@@ -1008,9 +934,9 @@ data.v.fil<- data.v[!rem, ]
 #########NEW FILTER for HT12v4
 if(filtervar=="new"){
   #other pipeline
-  #NB! this file is only 44K rows, not 47K!!! (control probes missing?)
+  
   rad<-read.table(file.path(dir.data_root,"humanHt12v4.txt"),header=TRUE,sep="\t")
-  #rad[grep("^GBP.*",rad$Gene_symbol),]
+  
   #hist(rad$BWA_NUM_MISMATCHES)
   bad<-as.character(rad[which(rad$uniq!=1),]$X.PROBE_ID)
   bad.nuID<-IlluminaID2nuID(bad)[,"nuID"]
@@ -1019,10 +945,6 @@ if(filtervar=="new"){
   rem2<-rad$uniq!=1
   names(rem2)<-rad$X.PROBE_ID[which(rad$uniq!=1)]
   rad2<-rad[which(rad$uniq!=1),]
-  
-  # data.raw.fil<- datalist[[i]][!rem2, ]  
-  # data.q.fil<- data.q[!rem2, ]
-  # data.v.fil<- data.v[!rem2, ]
   
   data.raw.fil<- datalist[[i]][which(!rownames(datalist[[i]])%in%bad.nuID),]  
   data.q.fil<- data.q[which(!rownames(data.q)%in%bad.nuID),]
@@ -1073,7 +995,7 @@ figure<-figure+1
 
 
 #MDS filtered probes
-#FIXREQ
+
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_all_samples_by_',contrast.variable1,'_filtered.pdf',sep=""),height=pdf.options()$height*1.0,width=pdf.options()$width*1.0)
 plotSampleRelationsAD(data.q.fil,method="mds",color=as.character(classcolours1[[i]]),plotchar=16)
 legend("bottomleft",
@@ -1115,7 +1037,7 @@ figure<-figure+1
 
 #PCA filtered probes
 
-#FIXREQ
+
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_all_samples_by_',contrast.variable1,'_filtered.pdf',sep=""),height=pdf.options()$height*1.0,width=pdf.options()$width*1.0)
 spca <- SamplePCA(exprs(data.q.fil), classfactor1[[i]])
 plot(spca, col=legendcolours1[,2],main=paste(nrow(exprs(data.q.fil))," probes (filtered)"))#,cex=2,cex.axis=2,cex.main=3,cex.lab=2.5,pch=16)
@@ -1184,7 +1106,6 @@ figure<-figure+1
 a<-levels(as.factor(paste(classifier1,classifier2)))
 b<-paste(classifier1,classifier2)
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_all_samples_by_category_filtered.pdf',sep=""),height=pdf.options()$height*1.0,width=pdf.options()$width*1.0)
 spca <- SamplePCA(exprs(data.q.fil), as.factor(paste(classifier1,classifier2)))
 plot(spca, col=brewer.pal(4,"Set2"),main=paste(nrow(exprs(data.q.fil))," probes (filtered)"))#,cex=2,cex.axis=2,cex.main=3,cex.lab=2.5,pch=16)
@@ -1210,7 +1131,6 @@ figure<-figure+1
 
 #PCA of all square 1 in 8 categories
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_all_samples_by_6_categories_filtered.pdf',sep=""),height=pdf.options()$height*1.0,width=pdf.options()$width*1.0)
 spca <- SamplePCA(exprs(data.q.fil), as.factor(paste(classfactor1[[i]],classfactor2[[i]])
 ))
@@ -1260,16 +1180,6 @@ flat<-classifier1
 flat<-factor(flat)
 design<-model.matrix(~0+flat)
 colnames(design)<-levels(flat)
-# batch=NULL
-# if("study"%in%colnames(pData(datalist[[i]]))){
-#   batch=factor(pData(datalist[[i]])$study)
-#   if(length(levels(batch))>1){
-#     design<-model.matrix(~0+flat+batch)
-#     colnames(design)<-c(levels(flat),paste("batch",1:(ncol(design)-length(levels(flat))),sep=""))
-#     
-#   }
-#   }
-
 
 
 flatfit<-lmFit(data.q.fil,design) 
@@ -1286,7 +1196,6 @@ flatfit2<-eBayes(flatfit2)
 #flatfit2$genes$ID<-featureData(data.q.fil)$TargetID
 if(filtervar=="new"){flatfit2$genes$ID<-probemap$SYMBOL[which(!rownames(data.v)%in%bad.nuID)]
 }else{flatfit2$genes$ID<-probemap$SYMBOL[!rem]}
-
 
 
 #three different methods of multiple testing adjustment are illustrated here. See limma userguide for details
@@ -1324,22 +1233,11 @@ TS<-paste(classifier1,classifier2,sep=".")
 TS<-factor(TS)
 design<-model.matrix(~0+TS)
 colnames(design)<-levels(TS)
-# batch=NULL
-# if("study"%in%colnames(pData(datalist[[i]]))){
-#   batch=factor(pData(datalist[[i]])$study)
-#   if(length(levels(batch))>1){
-#     design<-model.matrix(~0+TS+batch)
-#     colnames(design)<-c(levels(TS),paste("batch",1:(ncol(design)-length(levels(TS))),sep=""))
-#     
-#   }
-# }
-
-
 
 fit<-lmFit(data.q.fil,design) 
 
 #Defining individual edges for use in the contrast matrix
-#the pathway variable is used as it always differentiates cases from controls, and is not affected by lexicographical order. v1-4 represent the 4 edges of the square
+#the 'pathway' variable is used as it always differentiates cases from controls, and is not affected by lexicographical order. v1-4 represent the 4 edges of the square
 v1<-paste(pathway1[[2]],pathway2[[1]],sep=".")
 v2<-paste(pathway1[[2]],pathway2[[2]],sep=".")
 v3<-paste(pathway1[[1]],pathway2[[1]],sep=".")
@@ -1575,7 +1473,6 @@ figure<-figure+1
 
 #PCA plots for top 500 probes for each of the 4 edges
 
-#FIXREQ
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_PCA_top500_allEdges.pdf',sep=""),height=pdf.options()$height1.8,width=pdf.options()$width*1)
 par(mfrow=c(3,2))
 r500list<-lapply(list(edge1.fac.TT.500,edge2.fac.TT.500,edge3.fac.TT.500,edge4.fac.TT.500,edge5.flat.TT.500),rownames)
@@ -1599,8 +1496,6 @@ for (edge in 1:length(edges)){
 }
 dev.off()
 figure<-figure+1
-
-
 
 #Selection of probes to take forward to WGCNA. Several options are provided.
 interestingProbeID_try<-union(
@@ -1678,16 +1573,6 @@ for (result in 1:length(resultlist)){
 }  
  #NETWORK 0B: Move union of top4K (factorial, separate) DE genes for 4 edges to Neo4j, per edge####
 
-##data for insertion (duplicate probemap code!!!!!)
-# allfeatures<-rownames(fData(datalist[[1]]))
-# annotSYM_all<-as.character(getSYMBOL(allfeatures,"lumiHumanAll.db"))#need new annotSYM that matches targetID annotation. targetID is full of aliases!!!
-# #first name: annotSYM_all (these map to HGNC names)
-# #second choice:if annotSYM_all entry is NA, then use "targetID" from LumiBatch object (better than nothing)
-# probemap<-data.frame(cbind(allfeatures,fData(datalist[[1]])[,2],annotSYM_all),stringsAsFactors=F)
-# replace<-as.character(probemap[which(is.na(probemap[,3])),2])
-# faulty<-as.numeric(which(is.na(as.character(probemap[,3]))))
-# probemap$annotSYM_all[faulty]<-replace
-# colnames(probemap)<-c("nuID","targetID","SYMBOL") # here, the (HGNC) SYMBOL column has been 'fixed' by inserting illumina annotation information where SYMBOL is missing
 
 if (neoinsert=="on"){
 #toneolist<-list(edge1.fac.sep.TT.all[interestingProbeID_4K,],edge2.fac.sep.TT.all[interestingProbeID_4K,],edge3.fac.sep.TT.all[interestingProbeID_4K,],edge4.fac.sep.TT.all[interestingProbeID_4K,],edge5.flat.TT.all[interestingProbeID_4K,])
@@ -1711,127 +1596,13 @@ for (edge in 1:5){
   queryclean<-"MATCH (s:SYMBOL {name:'NA'}) OPTIONAL MATCH (s)-[r]-() DELETE s, r"
   cypher(graph,queryclean)
   
-  # blocks<-split(1:nrow(top4Kdata.merge),ceiling(seq_along(1:nrow(top4Kdata.merge))/1000))
-  # for (block in blocks){
-  # t = suppressMessages(newTransaction(graph))
-  # graphdata=top4Kdata.merge[block,]
-  # for (therow in 1:nrow(graphdata)) { #this can get extremely slow
-  #   probe = as.character(graphdata[therow, ]$nuID)
-  #   if (!is.null(graphdata[therow, ]$SYMBOL)){
-  #   gene = as.character(graphdata[therow, ]$SYMBOL)
-  #  } else if (is.na(graphdata[therow, ]$SYMBOL.y)){#this should not be necessary as the replacements were made in probemap
-  #     gene = as.character(graphdata[therow, ]$targetID)#use secondary name derived from chip annotation rather than illumina.db lookup. this will be non HGNC in many cases
-  #   } else {gene = as.character(graphdata[therow, ]$SYMBOL.y)}
-  #   #endif      
-  #   suppressMessages(appendCypher(t, 
-  #                query, 
-  #                nuID = probe, 
-  #                targetID = gene,
-  #                #invariant node properties
-  #                squareg = dataset.variables[[1]],
-  #                edgeg = edge,
-  #                contrastvarsg = contrastvars[[edge]],
-  #                contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-  #                logfcg = graphdata[therow, ]$logFC,
-  #                aveEXPRg = graphdata[therow, ]$AveExpr,
-  #                adjPVALg = graphdata[therow, ]$adj.P.Val
-  #                
-  #   ))
-  # }
-  # 
-  # print("committing :)")
-  # suppressMessages(commit(t))
-  # }#end blocks
+  
   #END NEO4J
   
 }#end edgewise neo4j loop
 }#end neoinsert if
 
-###
-#Paired analysis of blood-fluid: output additional results for compartment####
-#only apples to edges 1 and 2
-# if (q.i==5){#compartment conditional####
-#   
-#   for (edge in c(1,2)){#start edgewise
-#     edgeset<-edges[[edge]]
-#     #subset data
-#     edgedata<-data.q.fil[,edgeset]
-#     #design matrix
-#     #create person id from sampleIDs
-#     persons<-factor(pData(datalist[[1]][,edgeset])$ID_KERRYN)
-#     samples<-factor(pData(datalist[[1]][,edgeset])$sample_name)
-#     compartment<-factor(pData(datalist[[1]][,edgeset])$Compartment)
-#     #design.edge<-model.matrix(~persons+compartment)
-#     design.edge<-model.matrix(~0+compartment)
-#     colnames(design.edge)<-levels(compartment)
-#     
-#     #   colnames(design.edge)<-levels(factor(classifiers[[edge]]))
-#     design.edge
-#     
-#     corfit <- duplicateCorrelation(edgedata,design.edge,block=persons)
-#     corfit$consensus
-#     
-#     #lmFit
-#     fit.edge<-lmFit(edgedata,design.edge,block=persons,correlation=corfit$consensus)
-#     #contrast matrix
-#     contrast.edge<-makeContrasts(
-#       paste(pathways[[edge]][2],"-",pathways[[edge]][1]),
-#       levels=design.edge
-#     )
-#     contrast.edge
-#     #contrasts.fit
-#     fit2.edge<-contrasts.fit(fit.edge,contrast.edge)
-#     #eBayes
-#     fit2.edge<-eBayes(fit2.edge)
-#     fit2.edge$genes$ID<-featureData(edgedata)$TargetID
-#     #decideTests
-#     results.separate.edge<-decideTests(fit2.edge,method="separate")
-#     #venn diagrams
-#     vennDiagram(results.separate.edge,main=paste(names(edges)[edge],"(separate P)"),include=c("up","down"),counts.col=c("red","darkgreen"))
-#     #topTable
-#     edge.TT.sig.2=topTable(fit2.edge,coef=1,sort.by="B",resort.by="logFC",number=Inf,adjust.method="BH",p.value=0.05)#TT uses separate BH adjustment
-#     dict.entrez<-nuID2EntrezID(as.character(rownames(edge.TT.sig.2)),filterTh = NULL,lib.mapping='lumiHumanIDMapping', returnAllInfo = TRUE)
-#     newresult<-cbind(dict.entrez,edge.TT.sig.2)
-#     write.csv(newresult,file=file.path(dir.results,paste(analysis,dataset.names[[i]],"_edge_",edge,"_paired_SIG.csv",sep="")))
-#     
-#     edge.TT.500.2=topTable(fit2.edge,coef=1,sort.by="B",resort.by="logFC",number=500)
-#     dict.entrez<-nuID2EntrezID(as.character(rownames(edge.TT.500.2)),filterTh = NULL,lib.mapping='lumiHumanIDMapping', returnAllInfo = TRUE)
-#     newresult<-cbind(dict.entrez,edge.TT.500.2)
-#     write.csv(newresult,file=file.path(dir.results,paste(analysis,dataset.names[[i]],"_edge_",edge,"_paired_500.csv",sep="")))
-#     
-#     edge.TT.12K.2=topTable(fit2.edge,coef=1,sort.by="B",resort.by="logFC",number=12000)
-#     dict.entrez<-nuID2EntrezID(as.character(rownames(edge.TT.12K.2)),filterTh = NULL,lib.mapping='lumiHumanIDMapping', returnAllInfo = TRUE)
-#     newresult<-cbind(dict.entrez,edge.TT.12K.2)
-#     write.csv(newresult,file=file.path(dir.results,paste(analysis,dataset.names[[i]],"_edge_",edge,"_paired_12K.csv",sep="")))
-#     
-#     #added this to compare to csde lists made later
-#     edge.TT.1K.2=topTable(fit2.edge,coef=1,sort.by="B",resort.by="logFC",number=1000)
-#     dict.entrez<-nuID2EntrezID(as.character(rownames(edge.TT.1K.2)),filterTh = NULL,lib.mapping='lumiHumanIDMapping', returnAllInfo = TRUE)
-#     newresult<-cbind(dict.entrez,edge.TT.1K.2)
-#     write.csv(newresult,file=file.path(dir.results,paste(analysis,dataset.names[[i]],"_edge_",edge,"_paired_1K.csv",sep="")))
-#     
-#     
-#     
-#     #volcanoplot
-#     volcanoplot(fit2.edge,coef=1,highlight=30,col="grey",names=fit2.edge$genes$ID)
-#     export.plot(file.prefix=paste('fig',q.i,'.',an.count,'.',i,'.',figure,names(questions)[[q.i]],'.',analysis,names(datalist)[i],"volc_paired","_edge",edge,sep=""),export.formats=export.formats.plots,height=1*height,width=(1 + sqrt(5))/1*height)
-#     figure<-figure+1
-#     
-#     #heatmap
-#     phenomatrix_c<-matrix(cbind(as.character(colourfactors[[edge]]),as.character(colourfactors[[edge]])),ncol=2)
-#     superHeatmap2(x=edgedata,y=rownames(edge.TT.500.2),phenomatrix=phenomatrix_c,scale="row")
-#     
-#     export.plot(file.prefix=paste('fig',q.i,'.',an.count,'.',i,'.',figure,names(questions)[[q.i]],'.',analysis,names(datalist)[i],"heat_paired","_edge",edge,sep=""),export.formats=export.formats.plots,height=1*height,width=(1 + sqrt(5))/1*height)
-#     figure<-figure+1
-#     
-#   }#end edgewise
-#   
-#   
-# }#end compartment conditional
 
-###
-
-  
 
 #4_Deconvolution****************************************####
 analysis="4_Deconvolution"
@@ -2074,11 +1845,7 @@ tests<-data.frame()
     
     cellproptests<-rbind(cellproptests.edge,cellproptests.flat)
     write.csv(cellproptests,file=file.path(dir.results,paste("Stats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_wilcox.csv",sep="")))  
-    
-    
-    
 
-    
 ###########PBMC##############    
 #boxplot by condition and stats (edge 5:PBMC)####
 #convert and calculate####  
@@ -2157,9 +1924,7 @@ tests<-data.frame()
 for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
   statlist<-list()
   ratiolist<-list()
-  #print(the)
-  #print(levs[the[[1]]])
-  #print(levs[the[[2]]])
+
   for (k in 1:nrow(decmat.red.PBMC)) {
     
     statlist[[k]]<-
@@ -2181,173 +1946,7 @@ cellproptests.PBMC<-rbind(cellproptests.edge.PBMC,cellproptests.flat.PBMC)
 write.csv(cellproptests.PBMC,file=file.path(dir.results,paste("Stats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_PBMC_wilcox.csv",sep="")))  
     
 ############END PBMC########
-    
-    
-#2. csde####
-# 
-# #PC added to B cells
-# th<-apply(coef(decdat1)[1:2,],2,sum)
-# tc<-apply(coef(decdat1)[3:4,],2,sum)
-# b<-apply(coef(decdat1)[5:10,],2,sum)
-# #pc<-coef(decdat1)[10,]
-# nk<-apply(coef(decdat1)[11:12,],2,sum)
-# mo<-apply(coef(decdat1)[13:14,],2,sum)
-# dc<-apply(coef(decdat1)[15:16,],2,sum)
-# neut<-coef(decdat1)[17,]
-# 
-# bigprops<-matrix(
-#   rbind(th,tc,b,nk,mo,dc,neut    
-#   ),nrow=7)
-# rownames(bigprops)<-c("th","tc","b","nk","mo","dc","neut")
-# colnames(bigprops)<-colnames(coef(decdat1))
-# 
-# #Smallprops
-# data(Abbas)
-# l<-apply(coef(decdat1)[1:10,],2,sum)
-# nk<-apply(coef(decdat1)[11:12,],2,sum)
-# apc<-apply(coef(decdat1)[13:16,],2,sum)
-# neut<-coef(decdat1)[17,]
-# 
-# smallprops<-matrix(
-#   rbind(l,nk,apc,neut   
-#   ),nrow=4)
-# rownames(smallprops)<-c("lym","nk","apc","neut")
-# colnames(smallprops)<-colnames(coef(decdat1))
-# 
-# #edgewise csDE
-# for (edge in 1:length(edges)){
-# subset<-order(esApply(dtd,1,sd,na.rm=T))[1:5000]
-# edgeset<-dtd[subset,edges[[edge]]]
-# if(min(table(classifiers[[edge]]))<nrow(bigprops)) {
-# props<-smallprops
-# print("smallprops used")} else {
-#   props<-bigprops
-#   print("bigprops used")}
-# 
-# #ggplot and csplot don't play nice anymore.
-# # #make a "default" plot as the csDEplot may fail
-# # cs.de<-data.frame(c(1,2,3),c(1,2,3))
-# # gp<-ggplot(data=cs.de,aes(x=cs.de[,1],y=cs.de[,2]))+geom_point()+ggtitle("fail")
-# # 
-# # #this may fail
-# try(
-#   cs.de<-ged(
-#     edgeset,
-#     props[,edges[[edge]]],
-#     data=as.factor(classifiers[[edge]]),
-#     verbose=TRUE,nperm=1000))
-# par(parbackup);
-# # try(gp<-csplot(cs.de));
-# # 
-# # pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'_Cell-specific FDR plots.pdf',sep=""),height=pdf.options()$height*1.5,width=pdf.options()$width*1.5)
-# # print(gp)
-# # dev.off()
-# # figure<-figure+1
-# 
-# tt<-"no csDE result"
-# try(tt<-csTopTable(cs.de,decreasing=F,n=1000,sort.by="FDR"))
-# if(tt!="no csDE result"){
-# dict.th<-data.frame(cbind(names(tt$th),as.numeric(tt$th),as.character(nuID2targetID(as.character(names(tt$th)),species="Human"))));try(colnames(dict.th)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.th,file=file.path(dir.results,paste("csDE_Th_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.tc<-data.frame(cbind(names(tt$tc),as.numeric(tt$tc),as.character(nuID2targetID(as.character(names(tt$tc)),species="Human"))));try(colnames(dict.tc)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.tc,file=file.path(dir.results,paste("csDE_Tc_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.b<-data.frame(cbind(names(tt$b),as.numeric(tt$b),as.character(nuID2targetID(as.character(names(tt$b)),species="Human"))));try(colnames(dict.b)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.b,file=file.path(dir.results,paste("csDE_B_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.nk<-data.frame(cbind(names(tt$nk),as.numeric(tt$nk),as.character(nuID2targetID(as.character(names(tt$nk)),species="Human"))));try(colnames(dict.nk)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.nk,file=file.path(dir.results,paste("csDE_NK_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.mo<-data.frame(cbind(names(tt$mo),as.numeric(tt$mo),as.character(nuID2targetID(as.character(names(tt$mo)),species="Human"))));try(colnames(dict.mo)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.mo,file=file.path(dir.results,paste("csDE_MO_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.dc<-data.frame(cbind(names(tt$dc),as.numeric(tt$dc),as.character(nuID2targetID(as.character(names(tt$dc)),species="Human"))));try(colnames(dict.dc)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.dc,file=file.path(dir.results,paste("csDE_DC_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.neut<-data.frame(cbind(names(tt$neut),as.numeric(tt$neut),as.character(nuID2targetID(as.character(names(tt$neut)),species="Human"))));try(colnames(dict.neut)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.neut,file=file.path(dir.results,paste("csDE_neut_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.lym<-data.frame(cbind(names(tt$lym),as.numeric(tt$lym),as.character(nuID2targetID(as.character(names(tt$lym)),species="Human"))));try(colnames(dict.lym)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.lym,file=file.path(dir.results,paste("csDE_lym_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))
-# dict.apc<-data.frame(cbind(names(tt$apc),as.numeric(tt$apc),as.character(nuID2targetID(as.character(names(tt$apc)),species="Human"))));try(colnames(dict.apc)<-c("nuID","FDR","SYMBOL"))
-# write.csv(dict.apc,file=file.path(dir.results,paste("csDE_apc_",q.i,'.',an.count,'.',i,"_",names(datalist)[[i]],names(meth)[[h]],"_","_edge_",edge,".csv",sep="")))} else print(tt)
-# 
-# if(tt!="no csDE result"){ 
-# #pathway reactomePA
-# for (celltype in 1:length(tt)){
-# rgenesENT<-as.character(nuID2EntrezID(names(tt[[celltype]]),lib.mapping='lumiHumanIDMapping'))
-# rgenesE2<-rgenesENT[which(rgenesENT!="")]
-# 
-# rpa<-NA
-# rpa <- try(enrichPathway(unique(rgenesE2), organism="human",pvalueCutoff = 0.4,readable = T))
-# #head(summary(rpa))
-# summary(rpa)
-# 
-# #catch error conditions (NULL and NA content fpr rpa) and export result. This is subtle, and distinguishes between NULL and NA conditions
-# #edit: added another error condition: rpa may succeed, but summary(rpa) is empty, I have no idea why
-# 
-# succ<-TRUE
-# if (length(rpa)==0){succ<-FALSE;print(paste(names(tt)[celltype],"rpa is of zero length"))} else if (is.na(rpa)){succ<-FALSE;print(paste(names(tt)[celltype],"rpa is NA"))}else if (class(rpa)=="try-error"){succ<-FALSE;print(paste(names(tt)[celltype],"rpa gives a try error"))} else if (nrow(summary(rpa))==0){succ<-FALSE;print(paste(names(tt)[celltype],"summary(rpa) is of zero length"))} else if (nrow(summary(rpa))==1){succ<-TRUE;print(paste(names(tt)[celltype],"nrow summary rpa is of length 1"))}#edited last condition
-# 
-# if (succ) {
-# write.csv(summary(rpa),file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,"_",names(questions)[[q.i]],'_',analysis,names(datalist)[i],"Cell_",names(tt[celltype]),"_edge_",edge,"ReactomePA.csv",sep="")))
-# if(nrow(summary(rpa))>1){
-#   rpaplot<-barplot(rpa,showCategory=8)
-#   
-#   pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,names(tt[celltype]),"_cell_",'_rpaPlot.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)      
-#   rpaplot<-barplot(rpa,showCategory=8)
-#   print(rpaplot)
-#   dev.off()
-#   figure<-figure+1
-#   
-# }
-# #put iconv here
-# #the code below fixes an error due to an invlid multibyte string in some data subsets. Apparently, the database used by rpa is encoded in latin-9, and cnetplot does not recognise all characters for all possible labels. Therefore, we convert the encoding for the labels to UTF-8 so that things don't break
-# 
-# theOld<-rpa@result$Description
-# theNew<-iconv(theOld,from="LATIN-9",to="UTF-8")
-# rpa2<-rpa
-# rpa2@result$Description<-theNew
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,names(tt[celltype]),"_cell_",'_cnetPlot.pdf',sep=""),height=pdf.options()$height*1.8,width=pdf.options()$width*1.8)    
-# cnetplot(rpa2, categorySize = "pvalue")
-# dev.off()
-# figure<-figure+1
-# 
-# } else {print(paste("no result for rpa: ","Cell_",names(tt[celltype])))}
-# 
-# }#end for loop celltype
-# 
-# #get EntrezIDs on a per-cell basis
-# cellList<-list()
-# for (cell in 1:length(tt)){
-# rgenesENT<-as.character(nuID2EntrezID(names(tt[[cell]]),lib.mapping='lumiHumanIDMapping'))
-# cellList[[cell]]<-rgenesENT[which(rgenesENT!="")]
-# }
-# names(cellList)<-names(tt)
-# res<-"fail"
-# try(res <- compareCluster(cellList, fun = "enrichPathway"))
-# if (class(res)!="character"){
-# resplot<-plot(res)
-# resplotb<-resplot+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'_compareCluster_plot.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)    
-# print(resplotb)
-# dev.off()
-# figure<-figure+1}
-# 
-# #KEGG pathway enrichment
-# res2<-"fail"
-# try(res2 <- compareCluster(cellList, fun = "enrichKEGG"))
-# if (class(res2)!="character"){
-# if(nrow(summary(res2))>4){
-# resplot2<-plot(res2)
-# resplot2b<-resplot2+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-# 
-#  pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'_KEGG_enrich.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-#  print(resplot2b)
-# dev.off()
-# figure<-figure+1
-# }#end inner if
-# }#end if
-# 
-# 
-# }#end conditional pathway analysis
-# 
-# }#end edgewise csde
+
 
 #5_WGCNA********************************************####
 analysis="5_WGCNA_4k_tv"
@@ -2402,26 +2001,6 @@ colnames(abbasvals)<-c("GENES","LISTS")
 write.csv(abbasvals,file.path(dir.results,"abbasvals.csv"),row.names=F)
 
 #2. Expression data prep####
-
-# #batch correction
-# ##removeBatchEffect
-# batch=NULL
-# if("study"%in%colnames(pData(datalist[[i]]))){
-#   batch=factor(pData(datalist[[i]])$study)
-#   if(length(levels(batch))>1){
-#     exprs(data.q.fil)<-removeBatchEffect(data.q.fil,batch)
-#     pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_MDS_q_fil_BC_samples_by_',contrast.variable1,'.pdf',sep=""),height=pdf.options()$height*1.1,width=pdf.options()$width*1.1)
-#     plotSampleRelationsAD(data.q.fil,method="mds",color=as.character(classcolours1[[i]]),plotchar=16)
-#     legend("bottomleft",
-#            legendcolours1[,1],
-#            pch=16,
-#            col=legendcolours1[,2],
-#            cex=.9
-#     )
-#     dev.off()
-#     figure<-figure+1
-#   }#end test for length of study i.e number of batches
-# }#end test for existence of study
 
 #select data for WGCNA 1: use top x DE genes
 subset<-is.element(featureNames(data.q.fil),interestingProbeID_4K)
@@ -2525,36 +2104,7 @@ datTraits<-data.frame(datTraits)
 
 write.csv(datTraits,file=file.path(dir.results,"WGCNA_TRAIT_DATA.csv"))
 
-#new: remove highly correlated traits
 
-#debug
-#datTraits<-read.csv("~/output/build/version_2016-08-10_17_15_48/Q_5_square4/5_WGCNA_4k_tv/results/WGCNA_TRAIT_DATA.csv",row.names=1)
-#datTraits<-read.csv("~/output/build/version_2016-08-10_17_15_48/Q_10_rec1/5_WGCNA_4k_tv/results/WGCNA_TRAIT_DATA.csv",row.names=1)
-
-
-# #just for display purposes; modify datTraits later #fails occasionally due to NAs?
-# selectvector<-apply(datTraits,2,function(x){!sum(is.na(x))/length(x)>.25})
-# vars2<-datTraits[,selectvector]
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_mix_heatmap_reduced.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# mix.heatmap(vars2, rowmar=10, legend.mat=F)
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_distmap_variables.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# distmap(vars2, what="variables", margins=c(6,6))
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_distmap_subjects.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# distmap(vars2, what="subjects", margins=c(6,6))
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_confounder_plot.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# #confounderPlot(vars2,x="Compartment",y="HIV.Status")
-# confounderPlot(vars2,x=contrast.variable1,y=contrast.variable2)
-# dev.off()
-# figure<-figure+1
 
 #correlate traits
 
@@ -2575,31 +2125,6 @@ head(datTraits2)
 tmp <- cor(datTraits,method="spearman",use="p")
 #pheatmap(tmp)
 pheatmap(tmp,filename=paste('fig_',q.i,'.',an.count,'.',figure,'_spearman_correlated_traits_reduced.pdf',sep=""))
-
-#this needs to be fixed
-# #check with CluMix plots
-# selectvector2<-apply(datTraits,2,function(x){!sum(is.na(x))/length(x)>.25})
-# vars3<-datTraits[,selectvector2]
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_mix_heatmap_reduced.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# mix.heatmap(vars3, rowmar=10, legend.mat=F)
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_distmap_variables_reduced.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# distmap(vars3, what="variables", margins=c(6,6))
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_distmap_subjects_reduced.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# distmap(vars3, what="subjects", margins=c(6,6))
-# dev.off()
-# figure<-figure+1
-# 
-# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_confounder_plot_reduced.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
-# #confounderPlot(vars3,x="Compartment",y="HIV.Status")
-# confounderPlot(vars3,x=contrast.variable1,y=contrast.variable2)
-# dev.off()
-# figure<-figure+1
 
 write.csv(datTraits2,file=file.path(dir.results,"WGCNA_TRAIT_DATA_REDUCED.csv"))
 
@@ -2804,16 +2329,6 @@ bwgeneTree = bwnet$dendrograms[[1]];
 #calculate KMEs
 sigKMEs<-signedKME(datExpr,bwMEs)
 
-# ###NEW
-# dim(datExpr)
-# dimnames(datExpr)[[1]]
-# 
-# printFlush("Calculating connectivities...");
-# # Human network:
-# AdjMatHuman = abs(cor(datExpr ,use="p"))^thispower
-# diag(AdjMatHuman)=0
-# 
-# ###END new
 
 #load modules
 load(file.path(dir.output.version,"allmodules.RData"))
@@ -2962,7 +2477,7 @@ textMatrix = paste(signif(moduleTraitCor, 2), "\n(",
                  signif(moduleTraitQvalue, 1), ")", sep = "");
 dim(textMatrix) = dim(moduleTraitCor)
 
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_pheno_correlation.pdf',sep=""),,height=nrow(moduleTraitCor)/2,width=ncol(moduleTraitCor)*0.75) 
+pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_pheno_correlation.pdf',sep=""),height=nrow(moduleTraitCor)/2,width=ncol(moduleTraitCor)*0.75) 
 par(mar = c(8,10,2,3));par(mfrow=c(1,1))
 # Display the correlation values within a heatmap plot
 labeledHeatmap(Matrix = moduleTraitCor[den,],
@@ -3578,11 +3093,6 @@ write.csv(cellprop_withflow_tests.new,file=file.path(dir.results,paste("cellprop
 }#end ifNETWORK 2c: Quantifying module cell-proportion associations (limited to samples with flow) ####
 #12. GS/MM Gene relationship to trait and important modules: Gene Significance and Module Membership####
 
-#We quantify associations of individual genes with our trait of interest (which depends on the question/ contrast) by defining Gene Significance GS 
-#as (the absolute value of) the correlation between the gene and the trait. For each module, we also define a 
-#quantitative measure of module membership MM as the correlation of the module eigengene and the gene expression 
-#profile. This allows us to quantify the similarity of all genes on the array to every module.
-
 #version 1: by contrast (other version would be by edge)
 
 geneTraitSignificance<-list()
@@ -3608,11 +3118,6 @@ names(geneTraitSignificance[[contrastDirection]]) = paste("GS.", names(class), s
 names(GSPvalue[[contrastDirection]]) = paste("p.GS.", names(class), sep="");
 
 #Intramodular analysis: identifying genes with high GS and MM
-
-#Using the GS and MM measures, we can identify genes that have a high significance for class as well as high module membership in interesting modules. We plot a scatterplot of Gene Significance vs. Module Membership in all modules:
-
-#add code to label the top 2 or 3 genes
-#then fish out the probes and make a heatmap consisting of the hub genes
 
 par(parbackup);
 toptwovector<-vector()
@@ -4143,8 +3648,9 @@ dev.off()
 figure<-figure+1
 }
 ##--##end
+
 #21. MODULE NODE ANNOTATION calculation####
-#NEW module node annotations: difference between median values of ME for each module, and the q-value for the difference
+#NEW module node annotations: difference between median values of ME for each module, and the q-value for the difference (diffME)
 
 #for loop: contrast 1 and contrast 2
 all.statlist.modules<-list()
@@ -4588,8 +4094,6 @@ collectGarbage()
 
 #6_Pathway analysis*****************************************####
 
-
-
 analysis="6_Pathway"
 
 print(paste("Analysis:",analysis))
@@ -4952,6 +4456,8 @@ figure<-figure+1
   
 #7_CEGS modules********************************************####
 
+#CEGS: A.K.A. baylor
+
 analysis="7_CEGS"
 an.count=7
 figure<-1
@@ -4984,13 +4490,6 @@ if(neoinsert=="on"){
   ha2$news<-news
   ha2<-unique(ha2)
   
-  # hanu2<-paste(hanu,collapse="','")
-  # #need to add in platform specification
-  # q<-paste("MATCH (p:PROBETYPE)-[r]-(s:SYMBOL) WHERE p.name IN ['",hanu2,"'] RETURN p.name AS nuID2, s.name AS SYMBOL2")
-  # try(res<-cypher(graph,q))
-  # ha3<-merge(ha2,res,by.x="nuID",by.y="nuID2",all.x=FALSE)
-  # ha4<-ha3[,c("nuID","Type")]
-  
   ha4<-ha2[,c("nuID","Type")]
   colnames(ha4)<-c("GENES","LISTS")
   ha4<-unique(ha4[order(ha4$LISTS),])
@@ -5011,7 +4510,7 @@ down.res.list<-list()
 all.res.list<-list()
 alldata<-data.q[,edgeset]
 
-#don't re-use contrast and design matrices from DE
+#don't re-use contrast and design matrices from DE; recalculate instead
 
 TS<-factor(classifiers[[edge]])
 design<-model.matrix(~0+TS)
@@ -5021,7 +4520,7 @@ cont.matrix<-makeContrasts(
   contrast.list=eval(parse(text=paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]],sep=""))),
   levels=design
 )
-#3. In each module (2008) do DE analysis and send result to module matrix####
+#3. In each CEGS/ baylor module (2008) do DE analysis and send result to module matrix####
 for (module in 1:length(modlist4)){
   #select module probes
   datasymbols<-probemap$SYMBOL
@@ -5079,6 +4578,7 @@ for (module in 1:length(modlist4.2)){
   #within module correlation analysis
   #cor(data) or the transpose
 }
+
 #6. Generate module matrix####
 hmdata<-rep(NA,260)
 hmdata<-unlist(all.res.list)
@@ -5100,6 +4600,7 @@ figure<-figure+1
 
 cbind(names(modlist4.2),unlist(all.res.list))
 }#end edgewise for loop###
+
 #7. Baylor heatmaps####
 val.list<-lapply(diffExBaylor.edges,function(x){as.numeric(x[,2])})
 matBaylor<-matrix(as.numeric(unlist(val.list)),nrow=260)
@@ -5257,8 +4758,6 @@ try(WGCNA_BaylorResults2<-userListEnrichment(geneR=geneInfo$geneSymbol,labelR=ge
 
 setwd(dir.figures)
 #end baylor
-  
-
 
 #8_Networks**************************************####
 
@@ -8589,48 +8088,6 @@ if(class(datalist[[i]])=="ExpressionSet"){
 
 }#end neoinsert if
 
-#old
-#debug create (probe)- changed to merge
-#it has now been changed back to create for a new run
-
-# query = "
-# MATCH (wmod:wgcna {name:{wgcnamod},square:"",edge:{edgeg}})
-# MATCH (probe:PROBE {name:{nuID},square:{squareg},edge:{edgeg}})
-# MERGE (gene:SYMBOL {name:{targetID}}) 
-# CREATE (probe)-[:mapsTo]->(wmod)
-# CREATE (probe)-[:mapsTo]->(gene)
-# "
-# blocks<-split(1:nrow(geneInfo),ceiling(seq_along(1:nrow(geneInfo))/1000))
-# for (edge in 1:5){#FIXED!
-#   for (block in blocks){
-#     t = suppressMessages(newTransaction(graph))
-#     graphdata=geneInfo[block,]
-#     for (therow in 1:nrow(graphdata)) { #this can get extremely slow
-#       probe = as.character(graphdata[therow, ]$substanceBXH)
-#       wmod = as.character(graphdata[therow, ]$moduleColor)
-#       if (is.na(graphdata[therow, ]$geneSymbol)){
-#         gene = as.character(graphdata[therow, ]$targetID)#use secondary name derived from chip annotation rather than illumina.db lookup. this will be non HGNC in many cases
-#       } else {gene = as.character(graphdata[therow, ]$geneSymbol)}#modify# this causes problems as it is not the same as targetID}
-#       
-#       
-#       suppressMessages(appendCypher(t, 
-#                    query, 
-#                    wgcnamod = wmod,
-#                    nuID = probe, 
-#                    targetID = gene,
-#                    #invariant node properties
-#                    squareg = dataset.variables[[1]],
-#                    edgeg = edge               
-#       ))
-#     }
-#     
-#     #print("committing :)")
-#     print(paste("Edge:",edge,"Batch:", ceiling(therow/1000),"of",ceiling(nrow(graphdata)/1000), "committed."))
-#     suppressMessages(commit(t))
-#   }#end blocks
-#   #END NEO4J
-# }#end NEO4J edges
-
 
 #NETWORK 15: NEO4J CODE TO WRITE INTERPROBE NETWORKS####
 #debug: used merge
@@ -8654,44 +8111,6 @@ if (neoinsert=="on"){
                     CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:toInt(",edge,")}]->(probe2)",sep="")
       cypher(graph,query)
     }#end NEO4J edges
-
-    
-    
-  # query = "
-  # MATCH (probe1:PROBE {name:{probe1g},square:{squareg},edge:{edgeg}})
-  # MATCH (probe2:PROBE {name:{probe2g},square:{squareg},edge:{edgeg}})
-  # CREATE (probe1)-[:TOMCOR {TOMweight:{TOMweightg},square:{squareg},edge:{edgeg}}]->(probe2)
-  # "
-  # t = suppressMessages(newTransaction(graph))
-  # blocks<-split(1:nrow(graphdata_all),ceiling(seq_along(1:nrow(graphdata_all))/1000))
-  # for (edge in 1:5){
-  #   
-  # 
-  #   for (block in blocks){
-  #     t = suppressMessages(newTransaction(graph))
-  #     graphdata=graphdata_all[block,]
-  #     for (therow in 1:nrow(graphdata)) { #this can get extremely slow
-  #       probe1 = as.character(graphdata[therow, ]$fromNode)
-  #       probe2 = as.character(graphdata[therow, ]$toNode)
-  #       TOMweight = as.numeric(as.character(graphdata[therow,]$weight))
-  #       suppressMessages(appendCypher(t, 
-  #                                     query, 
-  #                                     probe1g = probe1,
-  #                                     probe2g = probe2,
-  #                                     TOMweightg = TOMweight,
-  #                                     #invariant node properties
-  #                                     squareg = dataset.variables[[1]],
-  #                                     edgeg = edge)
-  #       
-  #       )
-  #     }
-  #     
-  #     #print("committing :)")
-  #     print(paste("Edge:",edge,"Batch:", ceiling(therow/1000),"of",ceiling(nrow(graphdata)/1000), "committed."))
-  #     suppressMessages(commit(t))
-  #   }#end blocks
-  #   #END NEO4J
-  # }#end NEO4J edges
   }#end modNetList loop
 }#end neoinsert if
   
@@ -8835,8 +8254,6 @@ dev.off()
 rm(list=as.character(dataset.variables))
 collectGarbage()
 
-#mail
-try(sendmail("armin.deffur@icloud.com", subject=paste("Notification about question",q.i),message=paste("Calculations for question:",q.i," finished!",sep=""), password="rmail"))
 #Exit outer loop####
 }#exit outer loop
 
@@ -8892,31 +8309,6 @@ cypher(graph,query)
 ##end new
 
 
-#initial transaction
-# tx = suppressMessages(newTransaction(graph))
-# 
-# for (therow in 1:nrow(graphdata)) {
-#   genename = as.character(graphdata[therow, ]$SYMBOL)
-#   #print(genename)
-#   palwangname = as.character(graphdata[therow, ]$PalWangPW)
-#   #print(palwangname)
-#   query = paste("MATCH (gene:SYMBOL {name:'",genename,"'}) MATCH (palwang:PalWangPW {name:'",palwangname,"'}) MERGE (gene)-[:mapsTo]->(palwang)",sep="")
-#   #print(query)
-#   # Upload in blocks of 1000.
-#   if(therow %% 1000 == 0) {
-#     # Commit current transaction.
-#     suppressMessages(commit(tx))
-#     print(paste("Batch", therow / 1000, "committed."))
-#     # Open new transaction.
-#     tx = suppressMessages(newTransaction(graph))
-#   }
-#   
-#   suppressMessages(appendCypher(tx,query)) 
-#   
-# }
-# 
-# suppressMessages(commit(tx))
-
 #NETWORK 17: Map SYMBOL to reactomePW####
 #reactome
 library(ReactomePA)
@@ -8966,33 +8358,6 @@ cypher(graph,query)
 ##end new
 
 
-
-#initial transaction
-# tx = suppressMessages(newTransaction(graph))
-# 
-# for (therow in 1:nrow(graphdata)) {
-#   #print(i)
-#   genename = as.character(graphdata[therow, ]$SYMBOL)
-#   #print(genename)
-#   reactomename = as.character(graphdata[therow, ]$reactomePW)
-#   #print(palwangname)
-#   query = paste("MATCH (gene:SYMBOL {name:'",genename,"'}) MATCH (reactome:reactomePW {name:'",reactomename,"'}) MERGE (gene)-[:mapsTo]->(reactome)",sep="")
-#   #print(query)
-#   # Upload in blocks of 1000.
-#   if(therow %% 1000 == 0) {
-#     # Commit current transaction.
-#     suppressMessages(commit(tx))
-#     print(paste("Batch", therow / 1000,"of",nrow(graphdata), "committed."))
-#     # Open new transaction.
-#     tx = suppressMessages(newTransaction(graph))
-#   }
-#   
-#   suppressMessages(appendCypher(tx,query)) 
-#   
-# }
-# 
-# suppressMessages(commit(tx))
-
 #NETWORK 18: Map SYMBOL to ImmunePW####
 
 data(ImmunePathwayLists)
@@ -9019,33 +8384,6 @@ query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.c
 cypher(graph,query)
 
 ##end new
-
-
-#initial transaction
-# tx = suppressMessages(newTransaction(graph))
-# 
-# for (therow in 1:nrow(graphdata)) {
-#   #print(i)
-#   genename = as.character(graphdata[therow, ]$SYMBOL)
-#   #print(genename)
-#   immunePWname = as.character(graphdata[therow, ]$ImmunePW)
-#   #print(palwangname)
-#   query = paste("MATCH (gene:SYMBOL {name:'",genename,"'}) MATCH (immune:ImmunePW {name:'",immunePWname,"'}) MERGE (gene)-[:mapsTo]->(immune)",sep="")
-#   #print(query)
-#   # Upload in blocks of 1000.
-#   if(therow %% 1000 == 0) {
-#     # Commit current transaction.
-#     suppressMessages(commit(tx))
-#     print(paste("Batch", therow / 1000, "committed."))
-#     # Open new transaction.
-#     tx = suppressMessages(newTransaction(graph))
-#   }
-#   
-#   suppressMessages(appendCypher(tx,query)) 
-#   
-# }
-# 
-# suppressMessages(commit(tx))
 
 #END NEO4J
 
@@ -9087,34 +8425,6 @@ cypher(graph,query)
 
 ##end new
 
-
-#initial transaction
-# tx = suppressMessages(newTransaction(graph))
-# 
-# for (therow in 1:nrow(graphdata)) {
-#   #print(i)
-#   genename = as.character(graphdata[therow, ]$SYMBOL)
-#   #print(genename)
-#   cellname = as.character(graphdata[therow, ]$cellEx)
-#   #print(palwangname)
-#   ##proposed fix: replace match with merge if i want to include cellex that is nowhere significantly enriched in any wgcna module
-#   query = paste("MERGE (gene:SYMBOL {name:'",genename,"'}) MERGE (cell:cellEx {name:'",cellname,"'}) MERGE (gene)-[:mapsTo]->(cell)",sep="")
-#   #print(query)
-#   # Upload in blocks of 1000.
-#   if(therow %% 1000 == 0) {
-#     # Commit current transaction.
-#     suppressMessages(commit(tx))
-#     print(paste("Batch", therow / 1000, "committed."))
-#     # Open new transaction.
-#     tx = suppressMessages(newTransaction(graph))
-#   }
-#   
-#   suppressMessages(appendCypher(tx,query)) 
-#   
-# }
-# 
-# suppressMessages(commit(tx))
-
 #END NEO4J
 
 #NETWORK 21 and NETWORK 22: Map CELL to cellEx and cellprop #NEED TO COMPLETE THIS####
@@ -9144,39 +8454,10 @@ cypher(graph,query)
 
 ##end new
 
-
-#initial transaction
-# tx = suppressMessages(newTransaction(graph))
-# 
-# for (therow in 1:nrow(graphdata)) {
-#   #print(i)
-#   name1 = as.character(graphdata[therow, ]$exprop)
-#   name2 = as.character(graphdata[therow, ]$cell)
-#   query = paste("MERGE (exprop {name:'",name1,"'}) MERGE (cell:CELL {name:'",name2,"'}) MERGE (exprop)-[:mapsTo]->(cell)",sep="")
-#   #print(query)
-#   # Upload in blocks of 1000.
-#   if(therow %% 1000 == 0) {
-#     # Commit current transaction.
-#     suppressMessages(commit(tx))
-#     print(paste("Batch", therow / 1000, "committed."))
-#     # Open new transaction.
-#     tx = suppressMessages(newTransaction(graph))
-#   }
-#   
-#   suppressMessages(appendCypher(tx,query)) 
-#   
-# }
-# 
-# suppressMessages(commit(tx))
-
 #END NEO4J
 
 source("~/scripts/ANIMA_MC.R")
 
 #end final mappings####
-try(sendmail("armin.deffur@icloud.com", subject="Final mappings",message="Final mappings for reactome, PalWang, ImmunePW and cellEx are done", password="rmail"))
-
-}#end neoinsert if
-  }else{try(sendmail("armin.deffur@icloud.com", subject="Oops!",message=print(paste("I think something went wrong at",Sys.time(),"at question",q.i,"and analysis",analysis,"\n","error:\n",geterrmessage())), password="rmail"))}
 
 sink()
