@@ -23,19 +23,18 @@ for (dir in c(tabledir, cytodir,venndir,figdir,igraphdir,datadir)) {
   }
 }
 
-
-
 library(shiny)
-
+library(ggplot2)
+library(scales)
 library(networkD3)
 library(htmlwidgets)
 library(igraph)
 library(WGCNA)
-library(raster)
+#library(raster)
 
 library(DT)
 library(pheatmap)
-
+library(ReactomePA)
 library(illuminaHumanv3.db)
 library(illuminaHumanv4.db)
 
@@ -253,7 +252,7 @@ generegexlist<-list(
 squares<-cypher(graph,"MATCH (n:wgcna) RETURN DISTINCT n.square as squares")$squares
 labels<-squares
 labelsvec<-paste(squares,collapse="|")
-
+print("machines ok")
 #Required for cellcore3
 source(file.path(dir.R.files,"cellCore3.R"),local=TRUE)
 
@@ -265,7 +264,7 @@ query<-"MATCH (c:cellprop) RETURN DISTINCT c.name AS cellname3"
 cellnamelist3<-cypher(graph,query)
 cellnames3<-cellnamelist3$cellname3
 
-
+print("cellcore3 ok")
   
 # Define UI 
 ui<-fluidPage(
@@ -288,7 +287,15 @@ ui<-fluidPage(
                         column(4,sliderInput("ymax","y max",0,20,14,1),offset=1)),
                       fluidRow(checkboxInput('returncsv2', 'output csv of differential expression?', FALSE))
                                ),
-                  
+                    tabPanel("Phenotype",
+                             tags$head(tags$style("#Phenotype{height:90vh !important;}")),
+                             tags$head(tags$style("#phenoPlot{height:45vh !important;}")),
+                             #tags$head(tags$style("#Phenotype{height:90vh !important;}")),
+                             h3(paste('Phenotype:',project),style="color:#FF0000"),
+                             fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33)),
+                             fluidRow(column(4,uiOutput("choosePheno"),offset=.33)),
+                             fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33))
+                             ),
                     tabPanel("Machines",
                              tags$head(tags$style("#inflammasomes{height:90vh !important;}")),
                              h3(paste('Inflammasomes:',project),style="color:#FF0000"),
@@ -298,6 +305,23 @@ ui<-fluidPage(
                                column(4,sliderInput("plotheightMachine","plotheightMachine",500,1500,700,150))
                              )
                     ),
+                    tabPanel("Signatures",
+                             tags$head(tags$style("#signatures{height:90vh !important;}")),
+                             h3(paste('Signatures:',project),style="color:#FF0000"),
+                             fluidRow(
+                               #column(4,uiOutput("choosesquareSIG"),offset=.33),
+                               
+                                 column(4,selectInput("studySIG","Choose study",studies,selected=studies[1],multiple=FALSE)),
+                                 column(4,uiOutput("selectSIGset")),
+                                 
+                               
+                               column(2,selectInput("edgeSIG","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
+                             ),
+                             fluidRow(
+                               column(6,sliderInput("defSig","define signature",50,1000,100),offset=.33),
+                               column(4,selectInput("whichsig","choose subset",c("all","up","down")))
+                             )
+                             ),
                     #INTERFACE ELEMENTS: Tabs
                   tabPanel("Modules",
                       tags$head(tags$style("#igraphSP{height:85vh !important;}")),
@@ -495,16 +519,46 @@ ui<-fluidPage(
                   tabsetPanel(
                     #BXP
                     tabPanel("Gene",
-                             tabsetPanel("BXP",
+                             #tabsetPanel("BXP",
+                             tabsetPanel(             
                                          tabPanel("boxplot",plotOutput("boxplot")),
                                          tabPanel("detableBXP",DT::dataTableOutput('detableBXP'))
                              )
                              
                     ),
+                    
+                    #pheno
+                    tabPanel("Phenotype",
+                             tabsetPanel(
+                                          tabPanel("phenoDT",DT::dataTableOutput('phenodatatable')),
+                                          tabPanel("phenoPlot",uiOutput('phenoPlot'))
+                             )
+                    ),
+                    
                     #Machines
                     tabPanel("Machines",plotOutput("inflammasomes")),
+                    
+                    tabPanel("Signatures",
+                              tabsetPanel(
+                                          tabPanel("Signature table",DT::dataTableOutput("sigTable1")),
+                                          #tabPanel("Heatmap",plotOutput("heatmap1")),
+                                          tabPanel("Enrichment table",DT::dataTableOutput("enrichTable1")),
+                                          tabPanel("Barplot",plotOutput("barplot1")),
+                                          tabPanel("Dotplot",plotOutput("dotplot1")),
+                                          tabPanel("emapplot",plotOutput("emapplot1")),
+                                          tabPanel("cnetplot",plotOutput("cnetplot1")),
+                                          tabPanel("GSEA table",DT::dataTableOutput("gseaTable2")),
+                                          tabPanel("GSEA emapplot",plotOutput("emapplot2")),
+                                          tabPanel("gseaplot",plotOutput("gseaplot2"))
+                                         )
+
+
+                              ),
+                    # 
+                    
                     tabPanel("Single module",
-                      tabsetPanel("Single module",
+                      #tabsetPanel("Single module",
+                      tabsetPanel(
                                   tabPanel("igraphSP",plotOutput("igraphSP")),
                                   tabPanel("d3graphSP",forceNetworkOutput("d3graphSP",width="100%",height="400px")),
                                   tabPanel("moduleNodesSP",DT::dataTableOutput('moduleNodesSP')),
@@ -516,15 +570,19 @@ ui<-fluidPage(
                                   , selected = "d3graphSP")),
                       
                     tabPanel("All modules",
-                        tabsetPanel("All modules",
+                        #tabsetPanel("All modules",
+                        tabsetPanel(
                              tabPanel("module2d",plotOutput("module2d")),
                              tabPanel("intracor",plotOutput("intracor")),
+                             tabPanel("intracorModules",DT::dataTableOutput("dtintracor")),
+                             tabPanel("intracorPheno",DT::dataTableOutput("dtintracorpheno")),
                              tabPanel("sankey",sankeyNetworkOutput("sankey")),
                              tabPanel("projections",plotOutput("projections"))
                              )),
                     
                     tabPanel("Virtual Cells",
-                             tabsetPanel("cellcor",
+                             #tabsetPanel("cellcor",
+                             tabsetPanel(
                                          tabPanel("Single Cell",plotOutput("cellcor")),
                                          tabPanel("Cell Matrix",uiOutput("cellmatrix")),
                                          tabPanel("Cell and pathway summary",plotOutput("gigabar"))
@@ -532,7 +590,8 @@ ui<-fluidPage(
                     
                     
                     tabPanel("Meta-Analysis",
-                             tabsetPanel("Chaussabel",
+                             #tabsetPanel("Chaussabel",
+                             tabsetPanel(            
                                          #tabPanel("ModuleMeta",plotOutput("pheat")),
                                          tabPanel("ModuleMeta",uiOutput("plot.pheat")),
                                          tabPanel("igraph",plotOutput("igraph")),
@@ -576,6 +635,8 @@ server <- shinyServer(function(input, output) {
    plotwhichfun<-reactive({input$plotwhich})
    legposfun<-reactive({input$legpos})
    
+  
+   
    sankeynode1fun<-reactive({input$nodetype_sankey1})
    sankeynode2fun<-reactive({input$nodetype_sankey2})
    sankeycell1fun<-reactive({input$cellSet1})
@@ -592,7 +653,19 @@ server <- shinyServer(function(input, output) {
    edgeCellcorfun<-reactive({input$edges})
    cellCfun<-reactive({input$cellname})
    
+   #Signatures
+   studySIGfun<-reactive({input$studySIG})
+   squareSIGfun<-reactive({c(input$datasetsSIG)})
    
+   edgeSIGfun<-reactive({input$edgeSIG})
+   defSigfun<-reactive({input$defSig})
+   
+   whichSIGfun<-reactive({input$whichsig})
+   
+   #Pheno
+   squarephenofun<-reactive({input$PhenoSquare})
+   phenofun2<-reactive({input$phenochoice})
+   phenoplotheightfun<-reactive({input$phenoplotheight})
    #G1
    usestudy<-reactive({input$study})
    useset<-reactive({c(input$datasetsCC)})
@@ -672,7 +745,7 @@ server <- shinyServer(function(input, output) {
    })
    
    output$choosesquareBXP<-renderUI({
-     print("invoking input$set in renderUI function:output$choosesquare")
+     print("invoking input$set in renderUI function:output$choosesquareBXP")
      prefix<-paste("~/output/build/",buildfun(),"/",sep="")
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
@@ -680,11 +753,28 @@ server <- shinyServer(function(input, output) {
    })
    
    output$choosesquareMACHINE<-renderUI({
-     print("invoking input$set in renderUI function:output$choosesquare")
+     print("invoking input$set in renderUI function:output$choosesquareMACHINE")
      prefix<-paste("~/output/build/",buildfun(),"/",sep="")
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
      selectInput("MACHINEset","Choose square",allsubsetnames,selected="1",multiple=FALSE)
+   })
+   
+
+   output$choosesquarePheno<-renderUI({
+     print("invoking input$PhenoSquare in renderUI function:output$choosesquarePheno")
+     query<-"MATCH (n:personPheno) RETURN DISTINCT n.square as square"
+     res<-cypher(graph,query)
+     squarevec<-res$square
+     selectInput("PhenoSquare","Choose square",squarevec,selected="1",multiple=FALSE)
+   })
+   
+   output$choosePheno<-renderUI({
+     square<-squarephenofun()
+     query<-paste("MATCH (n:personPheno {square:'",square,"'}) RETURN DISTINCT n.name as pheno",sep="")
+     res<-cypher(graph,query)
+     phenovec<-res$pheno
+     selectInput("phenochoice","Choose pheno",phenovec,selected="1",multiple=FALSE)
    })
    
    output$menamegen1<-renderUI({
@@ -815,6 +905,15 @@ server <- shinyServer(function(input, output) {
    output$selectCCset<-renderUI({
      selectInput("datasetsCC","Choose dataset",setlistlist[[as.numeric(studyCellcorfun())]],selected=setlistlist[[1]],multiple=FALSE)
    })
+   output$selectSIGset<-renderUI({
+     print("doing SIGset")
+     print("studySIGfun()")
+     print(studySIGfun())
+     print(setlistlist[[as.numeric(studySIGfun())]])
+     selectInput("datasetsSIG","Choose dataset",setlistlist[[as.numeric(studySIGfun())]],selected=setlistlist[[1]],multiple=FALSE)
+   })
+   
+   
    #modcor
    output$selectModuleModcor<-renderUI({
      print("doing moduleModcor")
@@ -1090,7 +1189,6 @@ server <- shinyServer(function(input, output) {
      data.blood<-data[seq(1,nrow(data)-1,2),]
      data.fluid<-data[seq(2,nrow(data),2),]
 
-
      mes<-colnames(data.blood)[2:ncol(data.blood)]
      menames<-sort(colnames(data)[2:length(colnames(data))])
      intracor<-data.frame()
@@ -1104,17 +1202,25 @@ server <- shinyServer(function(input, output) {
        intracor<-rbind(intracor,c(unlist(strsplit(name,"ME"))[2],res$estimate,res$p.value))
      }
      colnames(intracor)<-c("Pheno","PearsonR","P-value")
-     write.csv(intracor,file.path(tabledir,paste(square,"intracor_pheno.csv",sep="_")))
+     write.csv(intracor,file.path(tabledir,paste(square,"intracor_ME.csv",sep="_")))
+     
+     
      phenovec<-colnames(data0[,which(!colnames(data0)%in%menames&!colnames(data0)=="X"&!colnames(data0)=="Row.names")])
      #print(phenovec)
      pdata<-data0[order(data0$X),phenovec]
      pdatablood<-pdata[seq(1,nrow(pdata)-1,2),]
      pdatafluid<-pdata[seq(2,nrow(data),2),]
+     
+     
      intracor2<-data.frame()
      for (name in phenovec){
        #print(name)
        res<-"Skip"
-       try(res<-cor.test(eval(parse(text=paste("pdatablood$",name,sep=""))),eval(parse(text=paste("pdatafluid$",name,sep=""))),method="p"))
+       bloodvec<-eval(parse(text=paste("pdatablood$",name,sep="")))
+       fluidvec<-eval(parse(text=paste("pdatafluid$",name,sep="")))
+       if(!identical(bloodvec,fluidvec)){
+       try(res<-cor.test(bloodvec,fluidvec,method="p"))
+       }
        # plot(eval(parse(text=paste("data.blood$",name,sep=""))),eval(parse(text=paste("data.fluid$",name,sep=""))),col=unlist(strsplit(name,"ME"))[2],main=paste(name,"\nPearsonR=",sprintf("%.3f",res$estimate),"Pval=",sprintf("%.3f",res$p.value)),pch=19,xlab="Blood",ylab="Fluid",xlim=c(-0.25,0.25),ylim=c(-0.25,0.25))
        # abline(lm(eval(parse(text=paste("data.blood$",name,sep="")))~eval(parse(text=paste("data.fluid$",name,sep="")))), col="red")
        # print(name)
@@ -1126,8 +1232,10 @@ server <- shinyServer(function(input, output) {
      }
      colnames(intracor2)<-c("Pheno","PearsonR","P-value")
      write.csv(intracor2,file.path(tabledir,paste(square,"intracor2_pheno.csv",sep="_")))
-
-
+     
+     output$dtintracorpheno<-DT::renderDataTable(datatable(intracor2)%>%formatSignif(names(intracor2),3),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50)) 
+     
+     
      #print("intracor is done")
      colnames(intracor)<-c("name","intracor","pval")
      query<-paste("MATCH (n:wgcna {square:'",square,"',edge:5}) RETURN n.name as name, n.modAUC1 as modAUC1, n.modAUC2 as modAUC2, n.diffME as diffME, n.sigenrich as sigenrich",sep="")
@@ -1136,6 +1244,7 @@ server <- shinyServer(function(input, output) {
      moduletable2<-merge(moduletable,intracor,by.x="name",by.y="name")
      #print("moduletable2 is done")
      write.csv(moduletable2,file.path(tabledir,paste(square,"moduletable2.csv",sep="_")))
+     output$dtintracor<-DT::renderDataTable(datatable(moduletable2)%>%formatSignif(names(moduletable2),3),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50)) 
      plot(modAUC1~intracor,data=moduletable2,pch=20,col="grey",main=paste(square,": Compartmentalised vs. representative processes",sep=""),xlab="Representation Index",ylab="Compartmentalisation Index")
      shadowtext(moduletable2$modAUC1~moduletable2$intracor,labels=moduletable2$name,col=moduletable2$name,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
      abline(h=0.75,col="blue")
@@ -1153,6 +1262,8 @@ server <- shinyServer(function(input, output) {
 
    })
    }#end conditional intracor
+   
+   
    
    output$d3graphSP<-renderForceNetwork({
      #get module
@@ -1202,10 +1313,17 @@ server <- shinyServer(function(input, output) {
      output$moduleEdgesSP<-DT::renderDataTable(currentedges,server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50))
      
      V(igr)$name=V(igr)$nodename
+     print("names before conversion")
+     print(sort(V(igr)$name))
+     V(igr)$name=make.names(V(igr)$name,unique=TRUE)# this becomes necessary where nodes of different type have the same name (e.g. pheno and CELL nodes named 'RBC')
+     print('names after make.names before conversion')
+     print(sort(V(igr)$name))
      #convert
      # Convert to object suitable for networkD3
      ig_d3 <- igraph_to_networkD3(igr, group = V(igr)$kind)
      print("conversion successful")
+     print(ig_d3$links)
+     print(ig_d3$nodes)
      # Create force directed network plot
      #R version 3.3.0 (D3 version 3)
      # forceNetwork(Links = ig_d3$links, Nodes = ig_d3$nodes,height=1200,width=1200,charge= -300,colourScale = JS("d3.scale.category20()"),
@@ -1652,17 +1770,24 @@ server <- shinyServer(function(input, output) {
      cexval2<-2*sqrt(120/nrow(plotMatrix))
      
     
+     print("debug4")
+     print(plotMatrix[1:5,1:5])
      
-     
+     print("debug5")
+     print(dev.cur())
+     cur_dev <- dev.cur()
      #new
-     pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2,main=paste("Study:",names(studies)[reacstudy],"Set:",setlistnameslist[[reacstudy]][reacset],"Edge:",reacedge,"PW filter:",sprintf("%.3f",slider1()),"Cell filter:",sprintf("%.3f",slider2())))
+     tp<-pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2,main=paste("Study:",names(studies)[reacstudy],"Set:",setlistnameslist[[reacstudy]][reacset],"Edge:",reacedge,"PW filter:",sprintf("%.3f",slider1()),"Cell filter:",sprintf("%.3f",slider2())))
+     dev.set(cur_dev)
+     print(tp)
+     
      #pheatmap(datamatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61))
      if(input$returnpdf==TRUE){
        pdf("plot.pdf",width=16,height=as.numeric(input$plotheightG1)/100,onefile=FALSE)
        pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2,main=paste("Study:",names(studies)[reacstudy],"Set:",setlistnameslist[[reacstudy]][reacset],"Edge:",reacedge,"PW filter:",sprintf("%.3f",slider1()),"Cell filter:",sprintf("%.3f",slider2())))
        #pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2,main=paste("study"))
        dev.off()
-     } 
+     }
      #end new
      
      
@@ -1734,10 +1859,7 @@ server <- shinyServer(function(input, output) {
    output$gigamat <- renderPlot({
      plotInputGigamat1()
    })
-   
-   
-   
-   
+
    output$gigabar<-renderPlot({
      plotInputGigbar()
      
@@ -1843,16 +1965,27 @@ server <- shinyServer(function(input, output) {
      #print("allmat3.allsame")
      #print(allmat3.allsame)
      if(useallsame()==TRUE){allmat3<-allmat3[,which(allmat3.allsame)]}else if(usediff()==TRUE){allmat3<-allmat3[,which(!allmat3.allsame)]}
-     breaks<-seq(-abs(max(allmat2)),abs(max(allmat2)),length.out=51)
+     breaks<-seq(-max(abs(allmat2)),max(abs(allmat2)),length.out=51)
      modulelist<-colnames(allmat3)
      #cex calculation
      cexval<-2*sqrt(258/ncol(allmat3))
      
+     cur_dev <- dev.cur()
      pheatout <- pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)))
      pheatres <- allmat3[c(pheatout$tree_row[["order"]]),pheatout$tree_col[["order"]]]
+     dev.set(cur_dev)
+     print(pheatout)
+     print("have printed heatmap")
      print(pheatres)
+     
      #the plotting
-     pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)))
+     #
+     #pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)),filename = NA)
+     #new
+     #
+     #print(tp)
+     
+     
      if(input$returnpdf==TRUE){
        pdf("plot.pdf",width=16,height=7,onefile=FALSE)
        pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)),width=16,height=7)
@@ -1887,11 +2020,12 @@ server <- shinyServer(function(input, output) {
     })
     
     output$pheat <- renderPlot({
+      
       plotInput()
+      
     })
     
-    
-   
+
    output$wgcnacol<-renderPlot({
      usematrix<-input$x1_cells_selected
      setlist=data$sets[unique(usematrix[,1])]
@@ -2336,7 +2470,11 @@ server <- shinyServer(function(input, output) {
      #cex calculation
      cexval1<-3*sqrt(28/ncol(plotMatrix))
      cexval2<-2*sqrt(120/nrow(plotMatrix))
-     pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2)
+     
+     cur_dev <- dev.cur()
+     pheatout <- pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2)
+     dev.set(cur_dev)
+     print(pheatout)
      #pheatmap(datamatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61))
      if(input$returnpdf==TRUE){
        pdf("plot.pdf",width=16,height=as.numeric(input$plotheightG2)/100,onefile=FALSE)
@@ -2392,8 +2530,11 @@ server <- shinyServer(function(input, output) {
     breaksvals<-max(abs(dfr))
     print(dfr)
     #breaksvals<-
-    pheatmap(dfr,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61))
     
+    cur_dev <- dev.cur()
+    theres<-pheatmap(dfr,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61))
+    dev.set(cur_dev)
+    print(theres)
   })
   
   plotInputMachines<-reactive({
@@ -2454,8 +2595,13 @@ server <- shinyServer(function(input, output) {
     print(anndf2)
     plotmat0<-plotmat0[order(anndf$protFunction),]
     print("debug14")
-    pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat0)),max(abs(plotmat0)),length.out=51),annotation_row = anndf2,main=paste(square,grxfun(),sep="_"))
-    #pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat)),max(abs(plotmat)),length.out=51),fontsize_row = 8,annotation_row = anndf2,main=paste(square,names(generegexlist)[grx],sep="_"),filename=file.path(figdir,paste(square,"_",names(generegexlist)[grx],".pdf",sep="")))
+    
+    cur_dev <- dev.cur()
+    
+    heatplot<-pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat0)),max(abs(plotmat0)),length.out=51),annotation_row = anndf2,main=paste(square,grxfun(),sep="_"))
+    
+    dev.set(cur_dev)
+    print(heatplot)#pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat)),max(abs(plotmat)),length.out=51),fontsize_row = 8,annotation_row = anndf2,main=paste(square,names(generegexlist)[grx],sep="_"),filename=file.path(figdir,paste(square,"_",names(generegexlist)[grx],".pdf",sep="")))
     
     #end individual squares
     
@@ -2502,8 +2648,221 @@ server <- shinyServer(function(input, output) {
     plotInputMachines()
   },height=700)
 
+    signatureQuery<-reactive({
+      
+      reacstudySIG<-as.numeric(studySIGfun())
+      print("reacstudySIG")
+      print(reacstudySIG)
+      #reacsetSIG<-as.numeric(squareModcorfun()[reacstudySIG])#debugging
+      reacsetSIG<-as.numeric(squareSIGfun())
+      print("squareSIGfun()")
+      print(squareSIGfun())
+      print("reacsetSIG")
+      print(reacsetSIG)
+      print("reacsetSIG")
+      print(reacsetSIG)
+      reacedgeSIG<-as.numeric(edgeSIGfun())
+      print("reacedgeSIG")
+      print(reacedgeSIG)
+      
+      studySIG<-names(studies)[reacstudySIG]
+      print("studySIG")
+      print(studySIG)
+      
+      setlistSIG<-setlistnameslist[[reacstudySIG]]
+      print("setlistSIG")
+      print(setlistSIG)
+      
+      squareSIG<-setlistSIG[[reacsetSIG]]
+      print("squareSIG")
+      print(squareSIG)
+      
+      sigsub<-whichSIGfun()
+      if(sigsub=="up"){
+        modifier<-" WHERE p.logfc > 0"
+      }else if (sigsub=="down"){
+        modifier<-" WHERE p.logfc < 0"
+      }else{
+        modifier<-""
+      }
+      
+      siglength<-as.numeric(defSigfun())
+      query<-paste("MATCH (s:SYMBOL)-[r]-(p:PROBE {square:'",squareSIG,"',edge:",reacedgeSIG,"}) ",modifier," RETURN s.name as SYMBOL, p.name AS nuID, p.logfc as logfc, p.adjPVAL ORDER BY p.adjPVAL",sep="")
+      
+      sigresult<-cypher(graph,query)
+      sigresult.trunc<-sigresult[1:siglength,]
+      print(head(sigresult.trunc))
+      sigresult.trunc
+      
+      
+    })
     
+    enrichfun<-reactive({
+      sigresult.trunc<-signatureQuery()
+      head(sigresult.trunc)
+      nuIDlist<-sigresult.trunc$nuID
+      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
+      print(entrezlist)
+      enrich.result<-enrichPathway(entrezlist,readable=T)
+      enrich.result
+    })
+    
+    gseafun<-reactive({
+      sigresult.trunc<-signatureQuery()
+      head(sigresult.trunc)
+      nuIDlist<-sigresult.trunc$nuID
+      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
+      sigresult.trunc$entrez<-entrezlist
+      print(head(sigresult.trunc))
+      d<-sigresult.trunc[,c("entrez","logfc")]
+      
+      ## feature 1: numeric vector
+      geneList = d[,2]
+      ## feature 2: named vector
+      names(geneList) = as.character(d[,1])
+      ## feature 3: decreasing order
+      geneList = sort(geneList, decreasing = TRUE)
+      
+      gsea.result<-gsePathway(geneList,nPerm=10000,pvalueCutoff=0.2,pAdjustMethod = "BH",verbose=F)
+      gsea.result
+    })
+    
+    #output:enrichPathway
+    output$sigTable1<-DT::renderDataTable(datatable(signatureQuery()),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15)) 
+    output$enrichTable1<-DT::renderDataTable(datatable(as.data.frame(enrichfun())),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15))
+    
+    #output:gsePathway
+    output$gseaTable2<-DT::renderDataTable(datatable(as.data.frame(gseafun())),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15))
+    
+    
+    
+    output$barplot1<-renderPlot({
+      plotdata<-enrichfun()
+      head(as.data.frame(plotdata))
+      barplot(plotdata)
+      
+      },height = 800)
+    
+    output$dotplot1<-renderPlot({
+      plotdata<-enrichfun()
+      head(as.data.frame(plotdata))
+      dotplot(plotdata)
+      
+    },height = 800)
+    
+    output$emapplot1<-renderPlot({
+      plotdata<-enrichfun()
+      head(as.data.frame(plotdata))
+      emapplot(plotdata)
+      
+    },height = 800)
+    
+    output$cnetplot1<-renderPlot({
+      plotdata<-enrichfun()
+      head(as.data.frame(plotdata))
+      cnetplot(plotdata)
+      
+    },height = 800)
+    
+    output$emapplot2<-renderPlot({
+      plotdata<-gseafun()
+      head(as.data.frame(plotdata))
+      emapplot(plotdata)
+      
+    },height = 800)
+    
+    output$gseaplot2<-renderPlot({
+      plotdata<-gseafun()
+      head(as.data.frame(plotdata))
+      gseaplot(plotdata)
+      
+    },height = 800)
+    
+    #output: phenotype
+    
+    phenoqueryfun<-reactive({
+      square<-squarephenofun()
+      pheno<-phenofun2()
+      query<-paste("MATCH (p:person)-[r]-(x) WHERE p.square =~ '",square,"' AND x.name ='",pheno,"' RETURN x.personName AS studyID, x.class1 AS class1, x.class2 AS class2, x.value as value",sep="")
+      res<-cypher(graph,query)
+      res$numeric<-as.numeric(res$value)
+      res$factor<-as.factor(res$value)
+      
+      print(str(res))
+      res
+    })
+    output$phenodatatable<-renderDataTable(phenoqueryfun())
+    
+    output$phenoPlotPrepare<-renderPlot({
+      data<-phenoqueryfun()
+      print(data$numeric)
+      print(is.na(data$numeric))
+      data$Categories<-interaction(data$class1,data$class2)
+      
+      if(sum(is.na(data$numeric))<length(data$numeric)){
+       
+        # Basic dot plot
+        plotfig<-ggplot(data, aes(x=Categories, y=numeric, fill=Categories)) + 
+          geom_boxplot(fill='seashell')+
+          geom_dotplot(binaxis='y', stackdir='center',stackratio=1.2,method='dotdensity') +
+          #stat_summary(fun.y=median, geom="point", shape=18, color="red") +
+          theme_minimal() +
+          theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+          theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+          theme(axis.text = element_text(size = rel(1.5))) +
+          theme(legend.text = element_text(size = rel(1.2))) +
+          theme(legend.title = element_text(size = rel(1.2))) +
+          theme(legend.text=element_text(size=rel(1.4))) +
+          theme(legend.key.size = unit(1,"cm")) +
+          labs(y = phenofun2()) +
+          ggtitle(paste(phenofun2(),"by class")) +
+          theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
 
+      }else{
+        
+        # ggplot(data=pd3cat,aes_string(x=names(pd3cat)[colu],fill=names(pd3cat)[colu]))+
+        #   geom_bar(aes(y = (..count..)/sum(..count..)))+
+        #   facet_grid(eval(parse(text=paste(contrast.variable[[1]],"~",contrast.variable[[2]],sep=""))))+
+        #   theme_bw()+
+        #   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+        #   scale_x_discrete(name=paste("Proportion by",contrast.variable2,"\nP=",format(testres_c2$p.value,digits=3)))+
+        #   scale_y_continuous(name=paste("Proportion by",contrast.variable1,"\nP=",format(testres_c1$p.value,digits=3)))+
+        #   ggtitle(names(pd3cat)[[colu]])
+        
+        
+        
+        
+        plotfig<-ggplot(data, aes(Categories, fill=factor)) + 
+          
+          geom_bar(aes(y = (..count..)/sum(..count..))) +
+          scale_y_continuous(labels=percent) +
+          
+          #geom_bar() +
+          #stat_summary(fun.y=median, geom="point", shape=18, color="red") +
+          theme_minimal() +
+          theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+          theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+          theme(axis.text = element_text(size = rel(1.5))) +
+          theme(legend.text = element_text(size = rel(1.2))) +
+          theme(legend.title = element_text(size = rel(1.2))) +
+          theme(legend.text=element_text(size=rel(1.4))) +
+          theme(legend.key.size = unit(1,"cm")) +
+          labs(y = paste("%:",phenofun2())) +
+          ggtitle(paste(phenofun2(),"by class")) +
+          theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+      }
+      
+     #ggplotly(plotfig,tooltip="studyID") 
+      plotfig
+    })
+   
+    
+    
+    output$phenoPlot <- renderUI({
+      plotOutput("phenoPlotPrepare", height = phenoplotheightfun())
+    })
+    
+     
    output$downloadPlot <- downloadHandler(
      filename = function() { paste("ANIMAplot",Sys.time(),".pdf",sep="") },
      content = function(file) {
