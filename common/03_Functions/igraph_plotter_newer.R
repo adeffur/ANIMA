@@ -160,7 +160,8 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
        }
     
     #image 2: projection1
-    b1.lay<-layout.kamada.kawai(b1,dim=2)
+    #b1.lay<-layout.kamada.kawai(b1,dim=2)
+    b1.lay<-lay_out
     start<-V(b1)$kind
     legstart<-levels(as.factor(V(b1)$kind))
     for (i in 1:nrow(dicti)){
@@ -169,12 +170,13 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
     }
     kindcolvector<-start
     if(2%in%plotwhich){
-    plot(b1,vertex.label=V(b1)$nodename,vertex.color=as.character(kindcolvector),layout=b1.lay,vertex.label.cex=vertex.label.cex)
+    plot(b1,vertex.label=V(b1)$nodename,vertex.color=as.character(kindcolvector),layout=b1.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex)
     }
     
     #image 3: projection2
     #b2.lay<-layout.fruchterman.reingold(b2,dim=2)
-    b2.lay<-layout.kamada.kawai(b2,dim=2)
+    #b2.lay<-layout.kamada.kawai(b2,dim=2)
+    b2.lay<-lay_out
     start<-V(b2)$kind
     legstart<-levels(as.factor(V(b2)$kind))
     for (i in 1:nrow(dicti)){
@@ -183,7 +185,7 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
     }
     kindcolvector<-start
     if(3%in%plotwhich){
-    plot(b2,vertex.label=V(b2)$nodename,vertex.color=as.character(kindcolvector),layout=b2.lay,vertex.label.cex=vertex.label.cex)
+    plot(b2,vertex.label=V(b2)$nodename,vertex.color=as.character(kindcolvector),layout=b2.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex)
     }
   }
   #Step 12. Return a graph object
