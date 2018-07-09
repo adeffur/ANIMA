@@ -6,6 +6,10 @@
 
 #Intro text
 
+#Changelog 16/6/2018
+#Made dedicated import directory in /home/output which is mapped to the neo4j import folder and mounted in the neo4j container
+#corrected paths for tmp.csv files that go into import
+#simplified queries for load csv w.r.t import target location
 
 #Setup####
 
@@ -30,7 +34,12 @@
   sessionInfo()
   print(paste("Begin time:",ds))
 
+  
+  #Make questions and prepare setlists ####
+  source(file.path(dir.data_root,"questions.R")) #this is specific to the project; each project will get its own set of questions tied to specific data.
   source("~/source_data/setlist.R")
+  
+
   
 #switch NEO4J and Cytoscape on or off independently ####
   neoinsert<-"on" #debug
@@ -38,8 +47,8 @@
   #initialise neo4j db
     graph<-startGraph(graphstring)#using docker for Mac!
     graph$version
-    print("clearing graph")
-    clear(graph,input=FALSE)
+    #print("clearing graph")
+    #clear(graph,input=FALSE)
     print("graph clear, making indexes")
     addIndex(graph,"PROBE","name")
     addIndex(graph,"PROBE","square")
@@ -118,8 +127,6 @@
   save(allmodules,file=file.path(dir.output.version,"allmodules.RData"))
   rm(allmodules)
 
-#Make questions####
-source(file.path(dir.data_root,"questions.R")) #this is specific to the project; each project will get its own set of questions tied to specific data.
 
 #open outer for loop####DEBUG Off####
 
@@ -339,13 +346,13 @@ figure<-1
     platform = getChipInfo(datalist[[i]])$chipVersion[1]
       
     if (!(platform%in%platforms)){
-      write.csv(probemap,"./tmp.csv")
+      write.csv(probemap,file.path(dir.import,"tmp.csv"))
       
       if (class(datalist[[i]])=="LumiBatch"){
-        query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine CREATE (probe:PROBETYPE {name:csvLine.nuID,platform:'",platform,"'}) MERGE (gene:SYMBOL {name:csvLine.targetID}) CREATE (probe)-[:mapsTo]->(gene)",sep="")
+        query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine CREATE (probe:PROBETYPE {name:csvLine.nuID,platform:'",platform,"'}) MERGE (gene:SYMBOL {name:csvLine.targetID}) CREATE (probe)-[:mapsTo]->(gene)",sep="")
         cypher(graph,query)
       }else{
-        query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine CREATE (probe:PROBETYPE {name:csvLine.nuID,platform:'",platform,"'}) MERGE (gene:SYMBOL {name:csvLine.SYMBOL}) CREATE (probe)-[:mapsTo]->(gene)",sep="")
+        query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine CREATE (probe:PROBETYPE {name:csvLine.nuID,platform:'",platform,"'}) MERGE (gene:SYMBOL {name:csvLine.SYMBOL}) CREATE (probe)-[:mapsTo]->(gene)",sep="")
         cypher(graph,query)
       }
       
@@ -376,8 +383,8 @@ figure<-1
   #Get phenodata
   pd2<-pData(datalist[[i]])
   #Save phenodata for the given dataset
+  rownames(pd2)<-pd2$sample_name#new, need to debug this step
   write.csv(pd2,file=file.path(dir.results,paste("PhenoData",dataset.names[[i]],".csv",sep="")))
-  
   
     pdm2<-read.csv(file.path(dir.data_root,matrixPDname),row.names=1,stringsAsFactors = FALSE)
     pd3<-pd2[,pdm2[dataset.variables[[i]],]==1]
@@ -386,6 +393,47 @@ figure<-1
     names(pd2)
     #this depends on the structure of the csv file
     varclass<-as.character(pdm2["varclass",])
+    
+    ##NEW
+    pdx<-pd2[,varclass%in%c("n","c")]
+    graphdata<-pdx
+    phenolist<-names(graphdata)
+    t = suppressMessages(newTransaction(graph))
+    
+    for (therow in 1:nrow(graphdata)) {
+      personName = as.character(rownames(graphdata)[therow])
+      
+      for (thepheno in phenolist){
+        persPheno = graphdata[therow,thepheno]
+        if(is.na(persPheno)){persPheno <- "not done"}
+        class1g = graphdata[therow,contrast.variable1]
+        class2g = graphdata[therow,contrast.variable2]
+        query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personPheno:personPheno {name:{phenoname},personName:{personName},value:{persPheno},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personPheno)"
+        
+        #if(!is.na(persPheno)){
+        suppressMessages(appendCypher(t, 
+                                      query,
+                                      personName = personName,
+                                      persPheno = persPheno,
+                                      phenoname = thepheno,
+                                      squareg = dataset.variables[[1]],
+                                      class2g = class2g,
+                                      class1g = class1g
+                                      
+                                      
+        ))
+        #}#end if
+        
+      }
+      
+      
+      
+    }#end row
+   
+    suppressMessages(commit(t))
+    
+    #END NEW
+    
     #analyse phenodata
     
     #categorical
@@ -460,19 +508,19 @@ c2cats<-levels(factor(classifier2))
  byc1<-describeBy(pd3num[,1:(ncol(pd3num)-2)],classifier1,mat=T)
  byc2<-describeBy(pd3num[,1:(ncol(pd3num)-2)],classifier2,mat=T)
  
- #all active TB
+ #contrast1:cases
  data.xs.contrast.variable1.2.all<-pd3num[eval(parse(text=paste("pd3num$",contrast.variable1,sep="")))==c1cats[[1]],1:(ncol(pd3num)-2)]
  byc1.2<-describeBy(data.xs.contrast.variable1.2.all,classifier2[eval(parse(text=paste("pd3num$",contrast.variable1,sep="")))==c1cats[[1]]],mat=T)
   
- #all not active TB
+ #contrast1:controls
  data.xs.contrast.variable1.1.all<-pd3num[eval(parse(text=paste("pd3num$",contrast.variable1,sep="")))==c1cats[[2]],1:(ncol(pd3num)-2)]
  byc1.1<-describeBy(data.xs.contrast.variable1.1.all,classifier2[eval(parse(text=paste("pd3num$",contrast.variable1,sep="")))==c1cats[[2]]],mat=T)
   
- #all HIV negative
+ #contrast2:cases
  data.xs.contrast.variable2.1.all<-pd3num[eval(parse(text=paste("pd3num$",contrast.variable2,sep="")))==c2cats[[1]],1:(ncol(pd3num)-2)]
  byc2.1<-describeBy(data.xs.contrast.variable2.1.all,classifier1[eval(parse(text=paste("pd3num$",contrast.variable2,sep="")))==c2cats[[1]]],mat=T)
 
- #all HIV positive
+ #contrast2:controls
  data.xs.contrast.variable2.2.all<-pd3num[eval(parse(text=paste("pd3num$",contrast.variable2,sep="")))==c2cats[[2]],1:(ncol(pd3num)-2)]
  byc2.2<-describeBy(data.xs.contrast.variable2.2.all,classifier1[eval(parse(text=paste("pd3num$",contrast.variable2,sep="")))==c2cats[[2]]],mat=T)
  
@@ -1586,9 +1634,9 @@ for (edge in 1:5){
   
   nodes<-RNeo4j::nodes
   #network-specific cypher query
-  write.csv(top4Kdata.merge,file.path(dir.figures,"tmp.csv"))
+  write.csv(top4Kdata.merge,file.path(dir.import,"tmp.csv"))
   
-  query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+  query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
   CREATE (probe:PROBE {name:csvLine.nuID,square:'",dataset.variables[[1]],"',edge:toInt(",edge,"),contrastvar:'",contrastvars[[edge]],"',contrast:'",pathways[[edge]][[2]],"-",pathways[[edge]][[1]],"',logfc:toFloat(csvLine.logFC),aveEXPR:toFloat(csvLine.AveExpr),adjPVAL:toFloat(csvLine['adj.P.Val'])})
   MERGE (gene:SYMBOL {name:csvLine.SYMBOL2})
   CREATE (probe)-[:mapsTo]->(gene)",sep="")
@@ -3366,32 +3414,34 @@ allLLIDs = as.numeric(annot$annotENTREZID[probes2annot]);
 allLLIDs=allLLIDs[!is.na(allLLIDs)]
 # $ Choose interesting modules
 intModules = unique(bwmoduleColors)[modOrder]
-#16. GO enrichment####
+#16. GO enrichment#### DEPRECATED. Need to replace with anRIchment 
+
 # As background in the enrichment analysis, we will use all probes in the analysis.
 fileName = file.path(dir.results,paste('ALL-LLID',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"_entrez_ids-all.txt"));
 write.table(as.data.frame(allLLIDs), file = fileName,row.names = FALSE, col.names = FALSE)
 
 #GOenr = GOenrichmentAnalysis(bwmoduleColors,allLLIDs,organism = "human", nBestP = 20,includeOffspring=TRUE,verbose=100)
-GOenr = goenrich2(bwmoduleColors,allLLIDs,organism = "human", nBestP = 20,includeOffspring=TRUE,verbose=100)#the current version of the function is broken; I fixed it and renamed it goenrich2, which is sourced by setup script
-tab = GOenr$bestPTerms[[4]]$enrichment
-names(tab)
-write.table(tab,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"_GOEnrichmentTable.csv",sep="")),sep=",",quote=TRUE,row.names=FALSE)
+#GOenr = goenrich2(bwmoduleColors,allLLIDs,organism = "human", nBestP = 20,includeOffspring=TRUE,verbose=100)#the current version of the function is broken; I fixed it and renamed it goenrich2, which is sourced by setup script
+#tab = GOenr$bestPTerms[[4]]$enrichment
+#names(tab)
+#write.table(tab,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"_GOEnrichmentTable.csv",sep="")),sep=",",quote=TRUE,row.names=FALSE)
 
 #on-screen
-keepCols = c(1, 2, 5, 6, 7, 12, 13);
-screenTab = tab[, keepCols];
+#keepCols = c(1, 2, 5, 6, 7, 12, 13);
+#screenTab = tab[, keepCols];
 # Round the numeric columns to 2 decimal places:
-numCols = c(3, 4);
-screenTab[, numCols] = signif(apply(screenTab[, numCols], 2, as.numeric), 2)
+#numCols = c(3, 4);
+#screenTab[, numCols] = signif(apply(screenTab[, numCols], 2, as.numeric), 2)
 # Truncate the the term name to at most 150 characters
-screenTab[, 7] = substring(screenTab[, 7], 1, 100)
+#screenTab[, 7] = substring(screenTab[, 7], 1, 100)
 # Shorten the column names:
-colnames(screenTab) = c("module", "size", "p-val", "Bonf", "nInTerm", "ont", "term name");
-rownames(screenTab) = NULL;
+#colnames(screenTab) = c("module", "size", "p-val", "Bonf", "nInTerm", "ont", "term name");
+#rownames(screenTab) = NULL;
 # Set the width of R output. The reader should play with this number to obtain satisfactory output.
-options(width=40)
+#options(width=40)
 # Finally, display the enrichment table:
-screenTab
+#screenTab
+
 #17. TOM plot####
 #make TOMplot#only run this if lots of memory. don't include in RData
 
@@ -3750,9 +3800,9 @@ moduleList[[colour]]<-mgr3
 res<-"fail"
 try(res <- compareCluster(moduleList, fun = "enrichPathway"))
 if (class(res)!="character"){
-resplot<-plot(res)
+resplot<-dotplot(res)
 resplot2<-resplot+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters Reactome.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1.3)
+pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters Reactome.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*2.5)
 print(resplot2)
 dev.off()
 figure<-figure+1}
@@ -3761,10 +3811,10 @@ figure<-figure+1}
 res2<-"fail"
 res2 <- try(compareCluster(moduleList, fun = "enrichKEGG"))
 if (class(res2)!="character" & class(res2)!="try-error"){
-if(nrow(summary(res2))>1){#added this as code fails with only one result
-resplot2<-plot(res2)
+if(nrow(as.data.frame(res2))>1){#added this as code fails with only one result
+resplot2<-dotplot(res2)
 resplot3<-resplot2+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters KEGG.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1.3)
+pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters KEGG.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*2.5)
 print(resplot3)
 dev.off()
 figure<-figure+1}
@@ -3774,10 +3824,10 @@ figure<-figure+1}
 res3<-"fail"
 try(res3 <- compareCluster(moduleList, fun = "enrichDO"))
 if (class(res3)!="character"){
-if (nrow(summary(res3))>1){
-resplot4<-plot(res3)
+if (nrow(as.data.frame(res3))>1){
+resplot4<-dotplot(res3)
 resplot5<-resplot4+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters DO.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1.3)
+pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters DO.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*2.5)
 print(resplot5)
 dev.off()
 figure<-figure+1}
@@ -3787,10 +3837,10 @@ figure<-figure+1}
 res4<-"fail"
 try(res4 <- compareCluster(moduleList,OrgDb='org.Hs.eg.db', fun = "enrichGO"))
 if (class(res4)!="character"){
-if (nrow(summary(res4))>1){
-resplot6<-plot(res4)
+if (nrow(as.data.frame(res4))>1){
+resplot6<-dotplot(res4)
 resplot7<-resplot6+theme(axis.text.x = element_text(angle = 270, hjust = 0))
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module_enrichGO.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1.3)
+pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module_enrichGO.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*2.5)
 print(resplot7)
 dev.off()
 figure<-figure+1}
@@ -5043,7 +5093,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 1 graphNEL####
-
+if(cytoscapelink=="on"){
+  #open Cytoscape connection
 gD.cyt <- igraph.to.graphNEL(gD)
 
 # We have to create attributes for graphNEL
@@ -5061,8 +5112,7 @@ gD.cyt <- initEdgeAttribute (gD.cyt, "weight", 'numeric', 0)
 gD.cyt <- initEdgeAttribute (gD.cyt, "R_sq", 'numeric', 0.0)
 gD.cyt <- initEdgeAttribute (gD.cyt, "edgeType", "char", "undefined")
 #NETWORK 1 RCytoscape####
-if(cytoscapelink=="on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -5369,7 +5419,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 2 graphNEL####
-
+if(cytoscapelink=="on"){
+  #open Cytoscape connection
 gD2.cyt <- igraph.to.graphNEL(gD2)
 
 # We have to create attributes for graphNEL
@@ -5388,8 +5439,7 @@ gD2.cyt <- initEdgeAttribute (gD2.cyt, "qvalue", 'numeric', 0)
 gD2.cyt <- initEdgeAttribute (gD2.cyt, "R_sq", 'numeric', 0.0)
 gD2.cyt <- initEdgeAttribute (gD2.cyt, "edgeType", "char", "undefined")
 #NETWORK 2 RCytoscape####
-if(cytoscapelink=="on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -5654,7 +5704,8 @@ if (neoinsert=="on"){
   #END NEO4J
 }#end neoinsert if
 #NETWORK 2b graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD2b.cyt <- igraph.to.graphNEL(gD2b)
 
 # We have to create attributes for graphNEL
@@ -5673,8 +5724,7 @@ gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "qvalue", 'numeric', 0)
 gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "R_sq", 'numeric', 0.0)
 gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "edgeType", "char", "undefined")
 #NETWORK 2b RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -5957,7 +6007,8 @@ if (dataset.variables=='berry.test'){
       #END NEO4J
     }#end neoinsert if
 #NETWORK 2c graphNEL####
-    
+    if(cytoscapelink == "on"){
+      #open Cytoscape connection    
     gD2c.cyt <- igraph.to.graphNEL(gD2c)
     
     # We have to create attributes for graphNEL
@@ -5976,8 +6027,7 @@ if (dataset.variables=='berry.test'){
     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "R_sq", 'numeric', 0.0)
     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "edgeType", "char", "undefined")
 #NETWORK 2c RCytoscape####
-    if(cytoscapelink == "on"){
-    #open Cytoscape connection
+
     
     # Now we can create a new graph window in cytoscape
     # Be sure that CytoscapeRPC plugin is activated
@@ -6166,7 +6216,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 3 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD3.cyt <- igraph.to.graphNEL(gD3)
 
 # We have to create attributes for graphNEL
@@ -6182,8 +6233,7 @@ gD3.cyt <- initEdgeAttribute (gD3.cyt, "qvalue", 'numeric', 0)
 #gD3.cyt <- initEdgeAttribute (gD3.cyt, "R_sq", 'numeric', 0.0)
 gD3.cyt <- initEdgeAttribute (gD3.cyt, "edgeType", "char", "undefined")
 #NETWORK 3 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -6384,7 +6434,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 4 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD4.cyt <- igraph.to.graphNEL(gD4)
 
 # We have to create attributes for graphNEL
@@ -6400,8 +6451,7 @@ gD4.cyt <- initEdgeAttribute (gD4.cyt, "qvalue", 'numeric', 0)
 #gD4.cyt <- initEdgeAttribute (gD4.cyt, "R_sq", 'numeric', 0.0)
 gD4.cyt <- initEdgeAttribute (gD4.cyt, "edgeType", "char", "undefined")
 #NETWORK 4 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -6630,7 +6680,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 5 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD5.cyt <- igraph.to.graphNEL(gD5)
 
 # We have to create attributes for graphNEL
@@ -6646,8 +6697,7 @@ gD5.cyt <- initEdgeAttribute (gD5.cyt, "qvalue", 'numeric', 0)
 #gD5.cyt <- initEdgeAttribute (gD5.cyt, "R_sq", 'numeric', 0.0)
 gD5.cyt <- initEdgeAttribute (gD5.cyt, "edgeType", "char", "undefined")
 #NETWORK 5 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -6851,7 +6901,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 6 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD6.cyt <- igraph.to.graphNEL(gD6)
 
 # We have to create attributes for graphNEL
@@ -6867,8 +6918,7 @@ gD6.cyt <- initEdgeAttribute (gD6.cyt, "qvalue", 'numeric', 0)
 #gD6.cyt <- initEdgeAttribute (gD6.cyt, "R_sq", 'numeric', 0.0)
 gD6.cyt <- initEdgeAttribute (gD6.cyt, "edgeType", "char", "undefined")
 #NETWORK 6 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -7042,7 +7092,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 8 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD8.cyt<-igraph.to.graphNEL(gD8)
 
 # We have to create attributes for graphNEL
@@ -7059,8 +7110,7 @@ gD8.cyt <- initEdgeAttribute (gD8.cyt, "qvalue", 'numeric', 0)
 #gD3.cyt <- initEdgeAttribute (gD3.cyt, "R_sq", 'numeric', 0.0)
 gD8.cyt <- initEdgeAttribute (gD8.cyt, "edgeType", "char", "undefined")
 #NETWORK 8 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -7244,7 +7294,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert 
 #NETWORK 9 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD9.cyt <- igraph.to.graphNEL(gD9)
 
 # We have to create attributes for graphNEL
@@ -7260,8 +7311,7 @@ gD9.cyt <- initEdgeAttribute (gD9.cyt, "qvalue", 'numeric', 0)
 #gD4.cyt <- initEdgeAttribute (gD4.cyt, "R_sq", 'numeric', 0.0)
 gD9.cyt <- initEdgeAttribute (gD9.cyt, "edgeType", "char", "undefined")
 #NETWORK 9 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -7446,7 +7496,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 10 graphNEL####
-
+#NETWORK 10 RCytoscape####
+if(cytoscapelink == "on"){
 gD10.cyt <- igraph.to.graphNEL(gD10)
 
 # We have to create attributes for graphNEL
@@ -7461,8 +7512,7 @@ gD10.cyt <- initEdgeAttribute (gD10.cyt, "weight", 'numeric', 0)
 gD10.cyt <- initEdgeAttribute (gD10.cyt, "qvalue", 'numeric', 0)
 #gD5.cyt <- initEdgeAttribute (gD5.cyt, "R_sq", 'numeric', 0.0)
 gD10.cyt <- initEdgeAttribute (gD10.cyt, "edgeType", "char", "undefined")
-#NETWORK 10 RCytoscape####
-if(cytoscapelink == "on"){
+
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
 gDCW10 <- new.CytoscapeWindow("NETWORK 10", graph = gD10.cyt, overwriteWindow = TRUE,host="192.168.65.2",rpcPort=9000)
@@ -7655,7 +7705,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 11 graphNEL####
-
+  if(cytoscapelink == "on"){
+    #open Cytoscape connection
 gD11.cyt <- igraph.to.graphNEL(gD11)
 
 # We have to create attributes for graphNEL
@@ -7671,8 +7722,7 @@ gD11.cyt <- initEdgeAttribute (gD11.cyt, "qvalue", 'numeric', 0)
 #gD6.cyt <- initEdgeAttribute (gD6.cyt, "R_sq", 'numeric', 0.0)
 gD11.cyt <- initEdgeAttribute (gD11.cyt, "edgeType", "char", "undefined")
 #NETWORK 11 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -7856,7 +7906,8 @@ suppressMessages(commit(t))
 #END NEO4J
 }#end neoinsert if
 #NETWORK 12 graphNEL####
-
+if(cytoscapelink == "on"){
+  #open Cytoscape connection
 gD12.cyt <- igraph.to.graphNEL(gD12)
 
 # We have to create attributes for graphNEL
@@ -7873,8 +7924,7 @@ gD12.cyt <- initEdgeAttribute (gD12.cyt, "qvalue", 'numeric', 0)
 #gD6.cyt <- initEdgeAttribute (gD6.cyt, "R_sq", 'numeric', 0.0)
 gD12.cyt <- initEdgeAttribute (gD12.cyt, "edgeType", "char", "undefined")
 #NETWORK 12 RCytoscape####
-if(cytoscapelink == "on"){
-#open Cytoscape connection
+
 
 # Now we can create a new graph window in cytoscape
 # Be sure that CytoscapeRPC plugin is activated
@@ -8051,15 +8101,15 @@ gc()
 #end doNetworks if loop####
 }#end doNetworks if loop####
 
-#NETWORK 14: Map module probes to Neo4j####
+#NETWORK 14: Map module probes to WGCNA modules####
 if (neoinsert=="on"){
 nodes<-RNeo4j::nodes
 #network-specific cypher query
 
-write.csv(geneInfo,file.path(dir.figures,"tmp.csv"))
+write.csv(geneInfo,file.path(dir.import,"tmp.csv"))
 if(class(datalist[[i]])=="ExpressionSet"){
   for (edge in 1:5){
-    query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+    query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
                   MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                   MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                   CREATE (probe)-[:mapsTo]->(wmod)              
@@ -8072,7 +8122,7 @@ if(class(datalist[[i]])=="ExpressionSet"){
   }
 }else if(class(datalist[[i]])=="LumiBatch"){
   for (edge in 1:5){
-    query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+    query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
                   MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                   MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                   CREATE (probe)-[:mapsTo]->(wmod)              
@@ -8103,9 +8153,9 @@ if (neoinsert=="on"){
     print(ceiling(nrow(graphdata_big)/10))
     print(paste("graphdata_all has",nrow(graphdata_all),"rows"))
     
-    write.csv(graphdata_all,file.path(dir.figures,"tmp.csv"))
+    write.csv(graphdata_all,file.path(dir.import,"tmp.csv"))
     for (edge in 1:5){
-      query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+      query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
                     MATCH (probe1:PROBE {name:csvLine.fromNode,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                     MATCH (probe2:PROBE {name:csvLine.toNode,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
                     CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:toInt(",edge,")}]->(probe2)",sep="")
@@ -8300,9 +8350,9 @@ graphdata<-graphdata.sub
 colnames(graphdata)<-c("SYMBOL","PalWangPW")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (gene:SYMBOL {name:csvLine.SYMBOL}) MATCH (palwang:PalWangPW {name:csvLine.PalWangPW}) MERGE (gene)-[:mapsTo]->(palwang)",sep="")
 cypher(graph,query)
 
@@ -8349,9 +8399,9 @@ graphdata<-graphdata.raw[graphdata.raw$PATHNAME3%in%indb$p.name,]
 colnames(graphdata)<-c("SYMBOL","reactomePW")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (gene:SYMBOL {name:csvLine.SYMBOL}) MATCH (reactome:reactomePW {name:csvLine.reactomePW}) MERGE (gene)-[:mapsTo]->(reactome)",sep="")
 cypher(graph,query)
 
@@ -8377,9 +8427,9 @@ graphdata<-graphdata.sub
 colnames(graphdata)<-c("SYMBOL","ImmunePW")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (gene:SYMBOL {name:csvLine.SYMBOL}) MATCH (immune:ImmunePW {name:csvLine.ImmunePW}) MERGE (gene)-[:mapsTo]->(immune)",sep="")
 cypher(graph,query)
 
@@ -8417,9 +8467,9 @@ graphdata<-graphdata.sub
 colnames(graphdata)<-c("SYMBOL","cellEx")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (gene:SYMBOL {name:csvLine.SYMBOL}) MATCH (cell:cellEx {name:csvLine.cellEx}) MERGE (gene)-[:mapsTo]->(cell)",sep="")
 cypher(graph,query)
 
@@ -8434,9 +8484,9 @@ graphdata<-read.csv(file.path(dir.annot,"cellmapEX.csv"),header=F)
 colnames(graphdata)<-c("cellEx","cell")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (c:cellEx {name:csvLine.cellEx}) MERGE (cell:CELL {name:csvLine.cell}) CREATE (c)-[:mapsTo]->(cell)",sep="")
 cypher(graph,query)
 
@@ -8446,16 +8496,18 @@ graphdata<-read.csv(file.path(dir.annot,"cellmapPROP.csv"),header=F)
 colnames(graphdata)<-c("cellprop","cell")
 
 ##new
-write.csv(graphdata,file.path(dir.figures,"tmp.csv"))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-query = paste("LOAD CSV WITH HEADERS FROM 'file://",file.path(dir.figures,"tmp.csv"),"' AS csvLine 
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (c2:cellprop {name:csvLine.cellprop}) MERGE (cell:CELL {name:csvLine.cell}) CREATE (c2)-[:mapsTo]->(cell)",sep="")
 cypher(graph,query)
 
 ##end new
 
 #END NEO4J
-
+}
+}
+  
 source("~/scripts/ANIMA_MC.R")
 
 #end final mappings####
