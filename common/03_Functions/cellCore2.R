@@ -207,7 +207,7 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
         #plot(res,widths=c(6,1),heights=c(6,1))
         #res2<-res
         res$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
-        plot(res,widths=c(1.8,1,4,1.3*(ncol(wcmat)/sqrt(ncol(wcmat)))),heights=c(1.5,4,1.5*(numpw/sqrt(numpw))))
+        plot(res,widths=c(1.8,1,4,1.3*(ncol(wcmat)/sqrt(ncol(wcmat)))),heights=c(1.5,4,1.5*(numpw/sqrt(numpw))));par(new=TRUE)
         plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
         text(-9,10,paste(squareC,"edge:",edgeC),cex=2.0,pos=4,xpd=NA)
         text(-9,9,paste("cell:",cellC),cex=2.0,pos=4,xpd=NA)
