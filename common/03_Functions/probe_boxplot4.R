@@ -15,14 +15,22 @@ probe_boxplot4<-function(squareC,generegex,probetype=FALSE,miny=6,maxy=14,orderP
   #pseudo classvar2:control, classvar2:cases, classvar1:control, classvar1:case, classvar1:control|classvar1:case
   query<-paste("MATCH (n:wgcna {square:'",squareC,"', name:'blue'}) RETURN n.edge AS edge, n.contrastvar AS contrastvar, n.contrast AS contrast",sep="")
   res<-cypher(graph,query)
+  print("nrow(res)")
+  print(nrow(res))
+  print("res")
+  print(res)
+  res<-res[order(res$edge),]#key!
+  print(res)
   classvar1<-res$contrastvar[1]
   classvar2<-res$contrastvar[3]
   c1con<-unlist(strsplit(res$contrast[1]," - "))[2]
   c1case<-unlist(strsplit(res$contrast[1]," - "))[1]
   c2con<-unlist(strsplit(res$contrast[3]," - "))[2]
   c2case<-unlist(strsplit(res$contrast[3]," - "))[1]
-  subsets<-eval(parse(text=paste("list(pd$",classvar2,"=='",c2con,"',pd$",classvar2,"=='",c2case,"',pd$",classvar1,"=='",c1con,"',pd$",classvar1,"=='",c1case,"',pd$",classvar1,"=='",c1con,"'|","pd$",classvar1,"=='",c1case,"')",sep="")))
   
+  subsets<-eval(parse(text=paste("list(pd$",classvar2,"=='",c2con,"',pd$",classvar2,"=='",c2case,"',pd$",classvar1,"=='",c1con,"',pd$",classvar1,"=='",c1case,"',pd$",classvar1,"=='",c1con,"'|","pd$",classvar1,"=='",c1case,"')",sep="")))
+  #print("subsets")
+  #print(subsets)
   ##end new subsets
   
   #loop over edges to make boxplot data structure
@@ -31,8 +39,11 @@ probe_boxplot4<-function(squareC,generegex,probetype=FALSE,miny=6,maxy=14,orderP
   controlslist<-list()
   groupnamelist<-list()
   
-  for (edgeC in 1:4){ 
+  for (edgeC in 1:4){
+    
+  print(paste("edge:",edgeC))
   subset=subsets[[as.numeric(edgeC)]]
+  #print(subset)
   data.qs<-data.q[,subset]
   pd<-pData(data.q)[subset,]
   #get probes for subset (re-use subsetting function from cellcor) and boxplot annotation information
@@ -48,17 +59,40 @@ probe_boxplot4<-function(squareC,generegex,probetype=FALSE,miny=6,maxy=14,orderP
   res<-res[order(res$probeID),]}
   res<-res[which(res$probeID%in%res0$probe),]
   res<-unique(res[order(res$Symbol),])
+  #print("res")
+  #print(res)
+  
   if(is.null(res)){print(paste("no result for",squareC))}
+  
   if(!is.null(res)){
   classifier<-res0$contrastvar[1]
+  print("classifier")
+  print(classifier)
   case<-unlist(strsplit(res0$contrast,"-"))[1]
+  print("case")
+  print(case)
   control<-unlist(strsplit(res0$contrast[1],"-"))[2]
+  print("control")
+  print(control)
   boxplotdatalist[[edgeC]]<-exprs(data.qs)[unique(res$probeID),]
+  
   caseslist[[edgeC]]<-which(eval(parse(text=paste("pd$",classifier,sep="")))==case)
+  print("caseslist[[edgeC]]")
+  print(caseslist[[edgeC]])
+  
   controlslist[[edgeC]]<-which(eval(parse(text=paste("pd$",classifier,sep="")))==control)
+  print("controlslist[[edgeC]]")
+  print(controlslist[[edgeC]])
+  
   groupnamelist[[edgeC]]<-list(control,case)
+  
+  
   }#endif
   }#end edgewise
+  
+  #print(caseslist)
+  #print(controlslist)
+  #print(groupnamelist)
   
   if(!is.null(res)&nrow(res)>1){
    #par(mfrow=c(max(3,ceiling(nrow(res)/3)),3),mar=c(12,10,6,3))
@@ -79,6 +113,7 @@ probe_boxplot4<-function(squareC,generegex,probetype=FALSE,miny=6,maxy=14,orderP
     g4dname<-paste(groupnamelist[[2]][[2]],"\n",groupnamelist[[4]][[2]])
     
     gdlist<-list(g1d,g2d,g3d,g4d)
+    #print(gdlist)
     stats<-kruskal.test(gdlist)
  
     boxplot(gdlist[orderP],ylim=c(miny,maxy),col=c("white","white","white","white"),ylab="expression:\nlog2 intensity\n",names=c(g1dname,g2dname,g3dname,g4dname)[orderP],las=2,main=paste(res$Symbol[row],"(",res$probeID[row],")\n",stats$method,"\n P value =",sprintf("%.2f",stats$p.value)),outpch=NA,boxwex=.5,border="gray50",cex.axis=1.5,cex.lab=1.5)
