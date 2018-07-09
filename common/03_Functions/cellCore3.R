@@ -9,6 +9,7 @@ cellCore3<-function(study="Berry",squareC,edgeC,cellC,pwm,PalWang,plotCell=TRUE)
  
   #pseudo classvar2:control, classvar2:cases, classvar1:control, classvar1:case, classvar1:control|classvar1:case
   query<-paste("MATCH (n:wgcna {square:'",squareC,"', name:'blue'}) RETURN n.edge AS edge, n.contrastvar AS contrastvar, n.contrast AS contrast",sep="")
+  print(query)
   res<-cypher(graph,query)
   classvar1<-res$contrastvar[1]
   classvar2<-res$contrastvar[3]
@@ -163,6 +164,7 @@ cellCore3<-function(study="Berry",squareC,edgeC,cellC,pwm,PalWang,plotCell=TRUE)
         }#end non-wgna else
         
         #logfc####
+        print("newdebug1")
         query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(p2:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:",edgeC,"}) RETURN DISTINCT y.name as probe, y.logfc AS logfc ",sep="")
         
         logfclist0<-cypher(graph,query)
@@ -196,16 +198,22 @@ cellCore3<-function(study="Berry",squareC,edgeC,cellC,pwm,PalWang,plotCell=TRUE)
         #mcolvec2[idvec,2]
         
         dimnames(cormat)<-list(NULL,NULL)
+        print("newdebug2")
         #plot(annHeatmap2(cormat,dendrogram=list("status"="hidden","dendro"=dendro.manual),legend=TRUE,col=blueWhiteRed,scale="none",annotation=list(Row=list("data"=wcmat,"asIs"=TRUE))))
         if(plotCell==TRUE){
         res<-annHeatmap2(cormat,dendrogram=list("status"="hidden","dendro"=dendro.manual),legend=TRUE,col=blueWhiteRed,scale="none",annotation=list(Row=list("data"=wcmat,"asIs"=TRUE),Col=list("data"=total,"asIs"=TRUE,control=list("pch"=16,"col.pch"=mcolvec2[idvec,2],numfac=4))))
+        print("newdebug3: we have res")
+        print(class(res))
+        #plot(res)
         #plot(res,widths=c(6,1),heights=c(6,1))
         #res2<-res
-        res$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
+        res$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,
+                                  2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
         plot(res,widths=c(1.8,1,4,1.3*(ncol(wcmat)/sqrt(ncol(wcmat)))),heights=c(1.5,4,1.5*(numpw/sqrt(numpw))))
-        plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
-        text(-9,10,paste(squareC,"edge:",edgeC),cex=2.0,pos=4,xpd=NA)
-        text(-9,9,paste("cell:",cellC),cex=2.0,pos=4,xpd=NA)
+        #plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
+        mtext(paste(squareC,"edge:",edgeC,"\n","cell:",cellC),cex=1.0,line=0)
+        #text(-9,10,paste(squareC,"edge:",edgeC),cex=2.0,pos=4,xpd=NA)
+        #text(-9,9,paste("cell:",cellC),cex=2.0,pos=4,xpd=NA)
         }
         #end####    
         
