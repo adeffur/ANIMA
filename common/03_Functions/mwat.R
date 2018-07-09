@@ -1,4 +1,15 @@
 ###MWAT FUNCTION####
+#' Title
+#'
+#' @param study 
+#' @param squareM 
+#' @param moduleM 
+#' @param edgeM 
+#'
+#' @return
+#' @export
+#'
+#' @examples
 mwat<-function(study="Berry",squareM,moduleM,edgeM){
   library(fastcluster)
   dataM=eval(parse(text=squareM))
@@ -132,16 +143,19 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     #res2$layout$plot<-matrix(c(0,5,0,0,4,0,0,1,2,0,3,0),ncol=4,dimnames=list(c("","image","rowAnn"),c("","leg2","image","colAnn")))
     #res2$layout$plot<-matrix(c(0,4,0,0,1,2,0,3,0),ncol=3,dimnames=list(c("","image","rowAnn"),c("leg2","image","colAnn")))
     print("actual plot")
+    print(res2)
     #plot(res2,widths=c(1.8,1,4,1)/2,heights=c(1.5,4,1.5*(numpw/sqrt(numpw)))/2)
     #plot(res2,widths=c(1.5,.5,3,1)/2,heights=c(1,3,1.0*(numpw/sqrt(numpw)))/2)
     plot(res2,widths=c(1,0.5,3,.8)/2,heights=c(1,4.5,1.0*(numpw/sqrt(numpw)))/3)
-    plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
-    text(-5,10,paste(squareM,"edge:",edgeM),cex=2.0,pos=4,xpd=NA)
-    text(-5,9,paste("module:",moduleM),cex=2.0,pos=4,xpd=NA)
-    text(-5,8,paste("modAUC1:",sprintf("%.3f",wa$modAUC1)),cex=2,pos=4,xpd=NA)
-    text(-5,7,paste("modAUC2:",sprintf("%.3f",wa$modAUC2)),cex=2,pos=4,xpd=NA)
-    text(-5,6,paste("diffME:",sprintf("%.3f",wa$diffME)),cex=2,pos=4,xpd=NA)
-    text(-5,5,paste("sigenrich:",sprintf("%.3f",wa$sigenrich)),cex=2,pos=4,xpd=NA)
+    #text(0,0,"TEST",add=TRUE)
+    #plot(10,5,type="n",axes=FALSE,ann=FALSE,xlim=c(0, 10),ylim = c(0,10))
+    mtext(paste(squareM,"edge:",edgeM,"\n","module:",moduleM,"\n","modAUC1:",sprintf("%.3f",wa$modAUC1),"\n","modAUC2:",sprintf("%.3f",wa$modAUC2),"\n","diffME:",sprintf("%.3f",wa$diffME),"\n","sigenrich:",sprintf("%.3f",wa$sigenrich)),cex=1.0,line=0)
+    #text(-5,10,paste(squareM,"edge:",edgeM),cex=2.0,pos=4,xpd=NA)
+    #text(-5,9,paste("module:",moduleM),cex=2.0,pos=4,xpd=NA)
+    #text(-5,8,paste("modAUC1:",sprintf("%.3f",wa$modAUC1)),cex=2,pos=4,xpd=NA)
+    #text(-5,7,paste("modAUC2:",sprintf("%.3f",wa$modAUC2)),cex=2,pos=4,xpd=NA)
+    #text(-5,6,paste("diffME:",sprintf("%.3f",wa$diffME)),cex=2,pos=4,xpd=NA)
+    #text(-5,5,paste("sigenrich:",sprintf("%.3f",wa$sigenrich)),cex=2,pos=4,xpd=NA)
     }#end final numpw check
     }#end turq.data dimension check
 }#end function
