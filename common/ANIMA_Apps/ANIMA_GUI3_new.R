@@ -32,6 +32,9 @@ library(igraph)
 library(WGCNA)
 #library(raster)
 
+library(plyr)
+library(xtable)
+
 library(DT)
 library(pheatmap)
 library(ReactomePA)
@@ -273,6 +276,15 @@ ui<-fluidPage(
               sidebarLayout(
                 sidebarPanel(
                   tabsetPanel(
+                    tabPanel("Phenotype",
+                             tags$head(tags$style("#Phenotype{height:90vh !important;}")),
+                             tags$head(tags$style("#phenoPlot{height:45vh !important;}")),
+                             #tags$head(tags$style("#Phenotype{height:90vh !important;}")),
+                             h3(paste('Phenotype:',project),style="color:#FF0000"),
+                             fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33)),
+                             fluidRow(column(4,uiOutput("choosePheno"),offset=.33)),
+                             fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33))
+                    ),
                     tabPanel("Gene",
                       tags$head(tags$style("#boxplot{height:100vh !important; overflow-y: scroll}")),
                       h3(paste('boxplot:',project),style="color:#FF0000"),
@@ -287,16 +299,7 @@ ui<-fluidPage(
                         column(4,sliderInput("ymax","y max",0,20,14,1),offset=1)),
                       fluidRow(checkboxInput('returncsv2', 'output csv of differential expression?', FALSE))
                                ),
-                    tabPanel("Phenotype",
-                             tags$head(tags$style("#Phenotype{height:90vh !important;}")),
-                             tags$head(tags$style("#phenoPlot{height:45vh !important;}")),
-                             #tags$head(tags$style("#Phenotype{height:90vh !important;}")),
-                             h3(paste('Phenotype:',project),style="color:#FF0000"),
-                             fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33)),
-                             fluidRow(column(4,uiOutput("choosePheno"),offset=.33)),
-                             fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33))
-                             ),
-                    tabPanel("Machines",
+                    tabPanel("Inflammasomes",
                              tags$head(tags$style("#inflammasomes{height:90vh !important;}")),
                              h3(paste('Inflammasomes:',project),style="color:#FF0000"),
                              fluidRow(column(4,uiOutput("choosesquareMACHINE"),offset=.33)),
@@ -517,6 +520,15 @@ ui<-fluidPage(
                 
                 mainPanel(
                   tabsetPanel(
+                    #pheno
+                    tabPanel("Phenotype",
+                             tabsetPanel(
+                               tabPanel("phenoDT",DT::dataTableOutput('phenodatatable')),
+                               tabPanel("phenoPlot",uiOutput('phenoPlot')),
+                               tabPanel("Summary",tableOutput("summary")),
+                               tabPanel("STATS",tableOutput("stats"))
+                             )
+                    ),
                     #BXP
                     tabPanel("Gene",
                              #tabsetPanel("BXP",
@@ -527,16 +539,8 @@ ui<-fluidPage(
                              
                     ),
                     
-                    #pheno
-                    tabPanel("Phenotype",
-                             tabsetPanel(
-                                          tabPanel("phenoDT",DT::dataTableOutput('phenodatatable')),
-                                          tabPanel("phenoPlot",uiOutput('phenoPlot'))
-                             )
-                    ),
-                    
-                    #Machines
-                    tabPanel("Machines",plotOutput("inflammasomes")),
+                    #Inflammasomes
+                    tabPanel("Inflammasomes",plotOutput("inflammasomes")),
                     
                     tabPanel("Signatures",
                               tabsetPanel(
@@ -576,6 +580,7 @@ ui<-fluidPage(
                              tabPanel("intracor",plotOutput("intracor")),
                              tabPanel("intracorModules",DT::dataTableOutput("dtintracor")),
                              tabPanel("intracorPheno",DT::dataTableOutput("dtintracorpheno")),
+                             tabPanel("intracorPhenoPlot",plotOutput("phenointracor")),
                              tabPanel("sankey",sankeyNetworkOutput("sankey")),
                              tabPanel("projections",plotOutput("projections"))
                              )),
@@ -718,7 +723,7 @@ server <- shinyServer(function(input, output) {
    # )
    cellfun<-reactive({input$cells})
    
-   #Machines
+   #Inflammasomes
    grxfun<-reactive({input$inflammasome})
    setfunMACHINE<-reactive({input$MACHINEset})
    #REACTIVE UI INPUT FUNCTIONS
@@ -1038,7 +1043,7 @@ server <- shinyServer(function(input, output) {
      c1<-contrasts$contrastvars[1]
      c2<-contrasts$contrastvars[2]
      
-     plot(modAUC1~modAUC2,data=datarec1,pch=20,col="grey",main=paste(square,": Modules differentiating ",c1," and ",c2,sep=""),xlab=paste(c2,"index"),ylab=paste(c1, "index"))#aspect ratio can be fixed with asp=1
+     plot(modAUC1~modAUC2,data=datarec1,pch=20,asp=1,col="grey",main=paste(square,": Modules differentiating ",c1," and ",c2,sep=""),xlab=paste(c2,"index"),ylab=paste(c1, "index"),height=900)#aspect ratio can be fixed with asp=1
      shadowtext(datarec1$modAUC1~datarec1$modAUC2,labels=datarec1$X,col=datarec1$X,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
 
      abline(h=0.75,col="blue")
@@ -1235,6 +1240,27 @@ server <- shinyServer(function(input, output) {
      
      output$dtintracorpheno<-DT::renderDataTable(datatable(intracor2)%>%formatSignif(names(intracor2),3),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50)) 
      
+     nameX<-phenofun2()
+     
+     bloodvecX<-eval(parse(text=paste("pdatablood$",nameX,sep="")))
+     fluidvecX<-eval(parse(text=paste("pdatafluid$",nameX,sep="")))
+     cordat<-data.frame(cbind(bloodvecX,fluidvecX))
+     colnames(cordat)<-c("blood","fluid")
+     
+     phenointracorplot<-ggplot(cordat, aes(x=blood, y=fluid)) + 
+       geom_point(shape=18, color="red",size=10) +
+       geom_smooth(method=lm) + 
+       geom_rug() +
+       theme_light() +
+       theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+       theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+       theme(axis.text = element_text(size = rel(1.5))) +
+       theme(aspect.ratio=1) +
+       ggtitle(nameX) +
+       theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+     output$phenointracor<-renderPlot({
+       phenointracorplot
+     },height=900)
      
      #print("intracor is done")
      colnames(intracor)<-c("name","intracor","pval")
@@ -2787,7 +2813,8 @@ server <- shinyServer(function(input, output) {
       res<-cypher(graph,query)
       res$numeric<-as.numeric(res$value)
       res$factor<-as.factor(res$value)
-      
+      res$class1<-as.factor(res$class1)
+      res$class2<-as.factor(res$class2)
       print(str(res))
       res
     })
@@ -2799,8 +2826,54 @@ server <- shinyServer(function(input, output) {
       print(is.na(data$numeric))
       data$Categories<-interaction(data$class1,data$class2)
       
+      
+      
       if(sum(is.na(data$numeric))<length(data$numeric)){
        
+        print("numstats")
+        numstat.kwt<-kruskal.test(numeric~class1,data=data)
+        print("KWT:")
+        print(numstat.kwt)
+        #print(str(numstat.kwt))
+        #print(data.frame(unlist(numstat.kwt,use.names = T)))
+        KWT_class1<-data.frame(unlist(numstat.kwt,use.names = T))
+        
+        sol<-ddply(data,~class1,summarise,mean=mean(numeric,na.rm=TRUE),sd=sd(numeric,na.rm=TRUE),median=median(numeric,na.rm=TRUE),IQR=IQR(numeric,na.rm=TRUE))
+        print(sol)
+        
+        print("numstats2")
+        numstat.kwt2<-kruskal.test(numeric~class2,data=data)
+        print("KWT2:")
+        print(numstat.kwt2)
+        KWT_class2<-data.frame(unlist(numstat.kwt2,use.names = T))
+        
+        sol2<-ddply(data,~class2,summarise,mean=mean(numeric,na.rm=TRUE),sd=sd(numeric,na.rm=TRUE),median=median(numeric,na.rm=TRUE),IQR=IQR(numeric,na.rm=TRUE))
+        print(sol2)
+        
+        print(KWT_class1)
+        print(KWT_class2)
+        KWT<-cbind(KWT_class1,KWT_class2)
+        colnames(KWT)<-c("class1","class2")
+        
+        colnames(sol)[1]<-"Class"
+        colnames(sol2)[1]<-"Class"
+        solcom<-rbind(sol,sol2)
+        
+        
+        output$summary<-renderTable(
+        solcom,
+          rownames=TRUE
+          
+        )
+        
+        output$stats<-renderTable(
+          KWT,
+          rownames=TRUE,
+         digits=3
+          #xtable(as.data.frame(numstat.kwt))
+
+        )
+        
         # Basic dot plot
         plotfig<-ggplot(data, aes(x=Categories, y=numeric, fill=Categories)) + 
           geom_boxplot(fill='seashell')+
@@ -2829,20 +2902,64 @@ server <- shinyServer(function(input, output) {
         #   scale_y_continuous(name=paste("Proportion by",contrast.variable1,"\nP=",format(testres_c1$p.value,digits=3)))+
         #   ggtitle(names(pd3cat)[[colu]])
         
+        print("do newdat :)")
+        newdat<-ftable(class1~value,data=data)
+        print("newdat")
+        print(class(newdat))
+        print(str(newdat))
+        print(newdat)
+        testres<-chisq.test(newdat)
+        print(testres)
+        
+        print("do newdat2 :)")
+        newdat2<-ftable(class2~value,data=data)
+        print("newdat2")
+        print(newdat2)
+        testres2<-chisq.test(newdat2)
+        print(testres2)
         
         
         
-        plotfig<-ggplot(data, aes(Categories, fill=factor)) + 
+        sumtab<-cbind(as.data.frame(newdat),as.data.frame(newdat2))
+        
+        print("dat frame conversion:")
+        chisq1<-data.frame(unlist(testres,use.names = T))
+        print(chisq1)
+        chisq2<-data.frame(unlist(testres2,use.names = T))
+        print(chisq2)
+        chisqtab<-cbind(chisq1,chisq2)
+        colnames(chisqtab)<-c("Class1","Class2")
+        
+        
+        
+        output$summary<-renderTable(
+          sumtab,
+          rownames=TRUE
           
-          geom_bar(aes(y = (..count..)/sum(..count..))) +
-          scale_y_continuous(labels=percent) +
+        )
+        
+        output$stats<-renderTable(
+          chisqtab[1:5,],
+          rownames=TRUE,
+          digits=3
+          #xtable(as.data.frame(numstat.kwt))
           
+        )
+        
+        #plotfig<-ggplot(data, aes(Categories, fill=factor)) + 
+        plotfig<-ggplot(data, aes(value, fill=factor)) +   
+          #geom_bar(aes(y = (..count..)/sum(..count..))) +
+          geom_bar() +
+          #scale_y_continuous(labels=percent) +
+          facet_grid(class1~class2) +
           #geom_bar() +
           #stat_summary(fun.y=median, geom="point", shape=18, color="red") +
-          theme_minimal() +
+          #theme_minimal() +
+          theme_light() +
           theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
           theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
           theme(axis.text = element_text(size = rel(1.5))) +
+          theme(strip.text = element_text(size = 14)) +
           theme(legend.text = element_text(size = rel(1.2))) +
           theme(legend.title = element_text(size = rel(1.2))) +
           theme(legend.text=element_text(size=rel(1.4))) +
