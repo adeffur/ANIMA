@@ -1975,19 +1975,45 @@ server <- shinyServer(function(input, output) {
      res<-cypher(graph,query)
      print(res)
      
-     plot(modAUC1~modAUC2,data=datarec1,pch=20,asp=1,col="grey",main=paste(square,": Modules differentiating ",c1," and ",c2,sep=""),xlab=paste(c2,"index"),ylab=paste(c1, "index"),height=900)#aspect ratio can be fixed with asp=1
-     shadowtext(datarec1$modAUC1~datarec1$modAUC2,labels=datarec1$X,col=datarec1$X,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
+     # plot(modAUC1~modAUC2,data=datarec1,pch=20,asp=1,col="grey",main=paste(square,": Modules differentiating ",c1," and ",c2,sep=""),xlab=paste(c2,"index"),ylab=paste(c1, "index"),height=900)#aspect ratio can be fixed with asp=1
+     # shadowtext(datarec1$modAUC1~datarec1$modAUC2,labels=datarec1$X,col=datarec1$X,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
+     # abline(h=0.75,col="blue")
+     # abline(v=0.75,col="blue")
+     
+     #######B
+     vp<-ggplot(res,aes(modAUC2,modAUC1))+
+       geom_point(aes(col=diffME),size=12,alpha=0.4)+
+       scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
+       geom_text_repel(aes(label=name),data=res,size=6) +
+       #theme_tufte() +
+       theme_light() +
+       #theme_minimal() +
+       labs(x = paste(c2,"index")) +
+       labs(y = paste(c1,"index")) +
+       labs(colour = paste("diffME edge:",edgefun())) +
+       theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+       theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+       theme(axis.text = element_text(size = rel(1.5))) +
+       theme(aspect.ratio=1) +
+       theme(legend.text = element_text(size = rel(1.2))) +
+       #theme(legend.title = element_text(size = rel(1.2))) +
+       #theme(legend.text=element_text(size=rel(1.4))) +
+       #theme(legend.key.size = unit(1,"cm")) +
+       #labs(y = phenofun2()) +
+       ggtitle(paste(square,": Modules differentiating ",c1," and ",c2,sep="")) +
+       theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+     #######E
+     
+     
 
-     abline(h=0.75,col="blue")
-     abline(v=0.75,col="blue")
-     
-     
      
      ##
      output$dtwgcna<-DT::renderDataTable({
          print("doing the data table for wgcna")
          datatable(res)%>%formatSignif(names(res),3)},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50))
      ##
+     
+     print(vp)
      
      # #Interesting, but not useful attempt to put wordclouds on module2d. extremely slow, result unreadable...
      # #plot(modAUC1~modAUC2,data=datarec1,pty = 's', type = 'n', xlim = c(0.5, 1), ylim = c(0.5, 1))
@@ -2144,18 +2170,51 @@ server <- shinyServer(function(input, output) {
      
      #print("intracor is done")
      colnames(intracor)<-c("name","intracor","pval")
-     query<-paste("MATCH (n:wgcna {square:'",square,"',edge:5}) RETURN n.name as name, n.modAUC1 as modAUC1, n.modAUC2 as modAUC2, n.diffME as diffME, n.sigenrich as sigenrich",sep="")
+     query<-paste("MATCH (n:wgcna {square:'",square,"',edge:",edgefun(),"}) RETURN n.name as name, n.modAUC1 as modAUC1, n.modAUC2 as modAUC2, n.diffME as diffME, n.sigenrich as sigenrich",sep="")
      moduletable<-cypher(graph,query)
      #print("moduletable is done")
      moduletable2<-merge(moduletable,intracor,by.x="name",by.y="name")
      #print("moduletable2 is done")
      write.csv(moduletable2,file.path(tabledir,paste(square,"moduletable2.csv",sep="_")))
      output$dtintracor<-DT::renderDataTable(datatable(moduletable2)%>%formatSignif(names(moduletable2),3),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50)) 
-     plot(modAUC1~intracor,data=moduletable2,pch=20,col="grey",main=paste(square,": Compartmentalised vs. representative processes",sep=""),xlab="Representation Index",ylab="Compartmentalisation Index")
-     shadowtext(moduletable2$modAUC1~moduletable2$intracor,labels=moduletable2$name,col=moduletable2$name,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
-     abline(h=0.75,col="blue")
-     #abline(v=0.5,col="blue")
-     abline(v=0.0,col="blue")
+     
+     # ####
+     # plot(modAUC1~intracor,data=moduletable2,pch=20,col="grey",main=paste(square,": Compartmentalised vs. representative processes",sep=""),xlab="Representation Index",ylab="Compartmentalisation Index")
+     # shadowtext(moduletable2$modAUC1~moduletable2$intracor,labels=moduletable2$name,col=moduletable2$name,font=2,cex=1.0,xpd=TRUE,bg="lightgrey")
+     # ####
+     
+     # abline(h=0.75,col="blue")
+     # #abline(v=0.5,col="blue")
+     # abline(v=0.0,col="blue")
+     print(str(moduletable2))
+     moduletable2$intracor<-as.numeric(moduletable2$intracor)
+     ####
+     #######B
+     vp<-ggplot(moduletable2,aes(intracor,modAUC1))+
+       geom_point(aes(col=diffME),size=12,alpha=0.4)+
+       scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
+       geom_text_repel(aes(label=name),data=moduletable2,size=6) +
+       #scale_x_discrete() +
+       #theme_tufte() +
+       theme_light() +
+       #theme_minimal() +
+       labs(y = "Compartmentalisation index") +
+       labs(x = "Representation index") +
+       labs(colour = paste("diffME edge:",edgefun())) +
+       theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+       theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+       theme(axis.text = element_text(size = rel(1.5))) +
+       theme(aspect.ratio=1) +
+       theme(legend.text = element_text(size = rel(1.2))) +
+       #theme(legend.title = element_text(size = rel(1.2))) +
+       #theme(legend.text=element_text(size=rel(1.4))) +
+       #theme(legend.key.size = unit(1,"cm")) +
+       #labs(y = phenofun2()) +
+       ggtitle(paste(square,": intracor",sep="")) +
+       theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+     #######
+     print(vp)
+     ####
      if(input$returnpdf==TRUE){
        pdf("plot.pdf",width=12,height=7,onefile=FALSE)
        plot(modAUC1~intracor,data=moduletable2,pch=20,col="grey",main=paste(square,": Compartmentalised vs. representative processes",sep=""),xlab="Representation Index",ylab="Compartmentalisation Index")
