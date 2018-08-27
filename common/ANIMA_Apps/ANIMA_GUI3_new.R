@@ -178,11 +178,38 @@ ribosomemods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(pw) WHERE (pw:reactom
 lipidmods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(pw) WHERE (pw:reactomePW OR pw:ImmunePW OR pw:PalWangPW) AND pw.name =~ '(?i).*lipid.*|.*cholesterol.*' RETURN DISTINCT b.name")$b.name
 prolifmods<-cypher(graph,"MATCH (b:baylor {edge:5})-[r]-(pw) WHERE (pw:reactomePW OR pw:ImmunePW OR pw:PalWangPW) AND pw.name =~ '(?i).*cell.*cycle*|.*mitosis*|.*checkpoint.*|.*cyclin.*' RETURN DISTINCT b.name")$b.name
 
+allmods<-cypher(graph,"MATCH (b:baylor) RETURN DISTINCT b.name as all")
+allmods<-allmods$all
 
 subset.list<-list("All"=all,"Neutrophils"=neutromods,"Monocytes"=monomods,"CD4 T cells"=cd4mods,"B cells"=bcellmods,"NK cells"=nkmods,"Lymphocytes"=lymmods,
                   "Red blood cells"=rbcmods,"Platelets"=pltmods,"Interferon signaling"=ifnmods,"Lysosome"=lysosomemods,
                   "Phagocytosis"=phagocytmods,"Antigen proc. pres."=antprocmods,"Glycolysis"=glycolmods,"Oxidative phosphorylation"=oxphosmods,"Ribosome"=ribosomemods,"Lipids"=lipidmods,"Cell proliferation"=prolifmods)
 
+
+subset.list2<-list("All"=allmods,"Neutrophils"=neutromods,"Monocytes"=monomods,"CD4 T cells"=cd4mods,"B cells"=bcellmods,"NK cells"=nkmods,"Lymphocytes"=lymmods,
+                  "Red blood cells"=rbcmods,"Platelets"=pltmods,"Interferon signaling"=ifnmods,"Lysosome"=lysosomemods,
+                  "Phagocytosis"=phagocytmods,"Antigen proc. pres."=antprocmods,"Glycolysis"=glycolmods,"Oxidative phosphorylation"=oxphosmods,"Ribosome"=ribosomemods,"Lipids"=lipidmods,"Cell proliferation"=prolifmods)
+
+sdf<-matrix(nrow=(length(subset.list2)-1),ncol=length(allmods),data=0)
+
+rown<-names(subset.list2)[2:(length(subset.list2))]
+print(rown)
+print(dim(sdf))
+
+row.names(sdf)<-rown
+colnames(sdf)<-allmods
+
+#dimnames(sdf)<-list(rown,allmods)
+print(sdf)
+for (sub in 2:length(subset.list)){
+  name<-names(subset.list)[sub]
+  sdf[name,]<-jitter(as.numeric(allmods%in%subset.list[[sub]]),factor=1,amount=0.0001)
+  sdf[name,]<-as.character(allmods%in%subset.list[[sub]])
+}
+
+print(sdf)
+sdf<-t(sdf)
+sdf<-as.data.frame(sdf,row.names = allmods)
 #datafiles<-paste(data$sets,".R",sep="")
 datafiles<-paste(unlist2(setlistnameslist),".R",sep="")
 
@@ -194,7 +221,6 @@ datasetmatrix<-data.frame(matrix(nrow=length(data$sets),ncol=5,data=1),row.names
 colnames(datasetmatrix)<-c("edge1","edge2","edge3","edge4","edge5")
 print("datasetmatrix")
 print(datasetmatrix)
-
 
 
 for (set in data$sets){
@@ -1340,9 +1366,11 @@ server <- shinyServer(function(input, output) {
      }
      
      siglength<-as.numeric(defSigfun())
-     query<-paste("MATCH (s:SYMBOL)-[r]-(p:PROBE {square:'",squareSIG,"',edge:",reacedgeSIG,"}) ",modifier," RETURN s.name as SYMBOL, p.name AS nuID, p.logfc as logfc, p.adjPVAL ORDER BY p.adjPVAL",sep="")
+     query<-paste("MATCH (s:SYMBOL)-[r]-(p:PROBE {square:'",squareSIG,"',edge:",reacedgeSIG,"})-[r2]-(n:wgcna) ",modifier," RETURN s.name as SYMBOL, p.name AS nuID, p.logfc as logfc, p.adjPVAL, n.name as module ORDER BY p.adjPVAL",sep="")
      
      sigresult<-cypher(graph,query)
+     sigresult<-sigresult[!duplicated(sigresult$nuID), ]
+     
      sigresult.trunc<-sigresult[1:siglength,]
      print(head(sigresult.trunc))
      sigresult.trunc
@@ -1486,12 +1514,43 @@ server <- shinyServer(function(input, output) {
       annotation<-edges[[reacedgeSIG]]
       rownames(annotation)<-annotation$name
       annotation<-annotation[,2:3]
+      print("annotation")
       print(annotation)
+      rowAnn<-as.data.frame(res$module)
+      colnames(rowAnn)<-"module"
+      print("res")
+      print(res)
+      print("rowAnn")
+      print(rowAnn)
+      print(res$nuID)
+      rownames(rowAnn)<-rownames(heatdata)
+      print("rowAnn")
+      print(rowAnn)
      print(str(heatdata))
+     
+     print(rownames(heatdata))
+     print(res$nuID)
+   
      cur_dev <- dev.cur()
      if(nrow(res)<100){boolrow<-TRUE}else{boolrow<-FALSE}
      
-     heatm<-pheatmap(heatdata,annotation_col=annotation,show_rownames=boolrow,scale=scale,labels_row=res$SYMBOL)
+     print("debug")
+     print(res$module)
+     print(as.factor(res$module))
+     print(levels(as.factor(res$module)))
+     print(list("module"=levels(as.factor(res$module))))
+     
+     levs<-levels(as.factor(res$module))
+     newlevs<-structure(levs, names=as.character(levs))
+     print(levs)
+     print(newlevs)
+     ac<-list(module=newlevs)
+     
+     print("ac")
+     print(ac)
+     print("do heatmap")
+     
+     heatm<-pheatmap(heatdata,annotation_col=annotation,annotation_row=rowAnn,show_rownames=boolrow,scale=scale,labels_row=res$SYMBOL,annotation_colors = ac)
      dev.set(cur_dev)
      print(heatm)
      
@@ -2679,7 +2738,9 @@ server <- shinyServer(function(input, output) {
      }
      rownames(allmat2)<-allmatnames
      #optional allsame code
+     print("debug A")
      allmat3<-allmat2[,chosenSubset]
+     print("debug B")
      allmat3.allup<-apply(allmat3,2,function(x){sum(x>0)==length(x)})
      #print("allmat3.allup")
      #print(allmat3.allup)
@@ -2695,8 +2756,47 @@ server <- shinyServer(function(input, output) {
      #cex calculation
      cexval<-2*sqrt(258/ncol(allmat3))
      
+     print("debug B2")
+     
+     print("chosen subset")
+     print(chosenSubset)
+     
+     finalmods<-colnames(allmat3)
+     print("finalmods")
+     print(finalmods)
+     
+     print(head(sdf))
+     print(head(chosenSubset))
+     anncol<-sdf[chosenSubset,]
+     print("anncol before")
+     print(anncol)
+     anncol<-anncol[which(rownames(anncol)%in%finalmods),]
+     
+     
+     print("debug C")
+     print(anncol)
+     print(dim(anncol))
+     print(str(anncol))
+     print(rownames(anncol))
+     print(colnames(anncol))
+     #anncol<-sdf
+     print(head(allmat3))
+     print(dim(allmat3))
+     print(str(allmat3))
+     
+     factor_colors = hsv((seq(0, 1, length.out = length(colnames(anncol)) + 1)[-1] + 0.2)%%1, 0.7, 0.95)
+     
+     ann_col = list()
+     for (bb in 1:length(colnames(anncol))){
+       #ann_col[[bb]]=c("FALSE"="white","TRUE"=colors()[sample(2:length(colors()),1)])
+       ann_col[[colnames(anncol)[bb]]]=c("FALSE"="white","TRUE"=factor_colors[bb])
+     }
+     print("debug D")
+     print(ann_col)
+     
+     
      cur_dev <- dev.cur()
-     pheatout <- pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)))
+     pheatout <- pheatmap(allmat3,col=blueWhiteRed(50),scale="none",breaks=breaks,annotation_col = anncol,fontsize_col=6+cexval,fontsize_row=9+cexval,main=paste(input$subset,c("all_same","alldiff")[c(useallsame(),usediff())],"n:",ncol(allmat3)),annotation_colors=ann_col,annotation_legend = F)
      pheatres <- allmat3[c(pheatout$tree_row[["order"]]),pheatout$tree_col[["order"]]]
      dev.set(cur_dev)
      print(pheatout)
