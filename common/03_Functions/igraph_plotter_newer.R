@@ -33,7 +33,7 @@ add.vertex.shape("fcircle", clip=igraph.shape.noclip,plot=mycircle, parameters=l
 #igraph_plotter function definition
 ###################################
 
-igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALSE,prefix=cytodir,filename="",vertexsize=15,lay_out=layout_with_dh(ig,maxiter=200,cool.fact=0.95,weight.node.dist=.65),optlabel="",optvalue="",optchar="",make.vertex.label=TRUE,return_graph=FALSE,plot_bipartite=FALSE,vertex.label.cex=.55,legendcex=1,plotd3=FALSE,plotwhich=c(1,2,3),main=NULL){
+igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALSE,prefix=cytodir,filename="",vertexsize=15,lay_out=layout_with_dh(ig,maxiter=200,cool.fact=0.95,weight.node.dist=.65),optlabel="",optvalue="",optchar="",make.vertex.label=TRUE,return_graph=FALSE,plot_bipartite=FALSE,vertex.label.cex=.55,legendcex=1,plotd3=FALSE,plotwhich=c(1,2,3),main=NULL,edgewidth=1){
   #Step 0
   require(RNeo4j)
   #Step 1: return the nodes
@@ -132,7 +132,7 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
   #Step 10. Generate the plot and add two legends (one identifying the node types, the other showing a scale for the rim colour)
   if (plotd3 != TRUE&1%in%plotwhich){
   #plot(ig,vertex.size=vertexsize,vertex.shape="fcircle",vertex.label=vertexlabel,vertex.color=as.character(kindcolvector),layout=ig.lay,vertex.label.cex=vertex.label.cex,vertex.label.color="dimgray",vertex.frame.color=rimcol,vertex.frame.width=framewidth,edge.label=sprintf("%.5s",E(ig)$PearsonR),edge.label.cex=.7,xlim = c(-1.0, 1.0),ylim = c(-1.7, 1.0),margin=c(0,0,0,0),edge.arrow.mode=0,main=main)
-  plot(ig,vertex.size=vertexsize,vertex.shape="fcircle",vertex.label=vertexlabel,vertex.color=as.character(kindcolvector),layout=ig.lay,vertex.label.cex=vertex.label.cex,vertex.label.color="dimgray",vertex.frame.color=rimcol,vertex.frame.width=framewidth,edge.label=sprintf("%.5s",E(ig)$PearsonR),edge.label.cex=.7,edge.arrow.mode=0,main=main)#,xlim = c(-1.0, 1.0),ylim = c(-1.7, 1.0),margin=c(0,0,0,0)
+  plot(ig,vertex.size=vertexsize,vertex.shape="fcircle",vertex.label=vertexlabel,vertex.color=as.character(kindcolvector),layout=ig.lay,vertex.label.cex=vertex.label.cex,vertex.label.color="dimgray",vertex.frame.color=rimcol,vertex.frame.width=framewidth,edge.label=sprintf("%.5s",E(ig)$PearsonR),edge.label.cex=.7,edge.arrow.mode=0,main=main,edge.width=edgewidth)#,xlim = c(-1.0, 1.0),ylim = c(-1.7, 1.0),margin=c(0,0,0,0)
     
   legend("bottomleft",levels(factor(V(ig)$kind)),fill=legstart,cex=legendcex,title="Vertex Type")
   legend("bottomright",sprintf("%.3f",seq(-extreme,extreme,length.out=11)),fill=as.character(numbers2colors(seq(-extreme,extreme,length.out=11),signed=TRUE,lim=c(-extreme,extreme),centered=T)),cex=legendcex,title=rimpar,ncol=2)
@@ -170,7 +170,7 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
     }
     kindcolvector<-start
     if(2%in%plotwhich){
-    plot(b1,vertex.label=V(b1)$nodename,vertex.color=as.character(kindcolvector),layout=b1.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex)
+    plot(b1,vertex.label=V(b1)$nodename,vertex.color=as.character(kindcolvector),layout=b1.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex,edge.width=edgewidth)
     }
     
     #image 3: projection2
@@ -185,7 +185,7 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
     }
     kindcolvector<-start
     if(3%in%plotwhich){
-    plot(b2,vertex.label=V(b2)$nodename,vertex.color=as.character(kindcolvector),layout=b2.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex)
+    plot(b2,vertex.label=V(b2)$nodename,vertex.color=as.character(kindcolvector),layout=b2.lay,vertex.label.cex=vertex.label.cex,vertex.size=vertexsize,legend.cex=legendcex,edge.width=edgewidth)
     }
   }
   #Step 12. Return a graph object
