@@ -7,9 +7,10 @@
 #    http://shiny.rstudio.com/
 #
 #install packages until docker image updated:
-#install.packages("shinycssloaders")
-#install.packages("ggpubr")
-#devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)
+ # install.packages("shinycssloaders")
+ # install.packages("ggpubr")
+ # devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)
+ # install.packages("shinythemes")
 #File paths
 tabledir="~/output/project/tabular"
 cytodir="~/output/project/cytoscape"
@@ -25,7 +26,7 @@ for (dir in c(tabledir, cytodir,venndir,figdir,igraphdir,datadir)) {
     dir.create(dir, recursive=T,showWarnings=T)
   }
 } 
-
+#library(shinythemes)
 library(shiny)
 library(ggplot2)
 library(scales)
@@ -355,9 +356,14 @@ ui<-fluidPage(
                                
                                  column(4,selectInput("studySIG","Choose study",studies,selected=studies[1],multiple=FALSE)),
                                  column(4,uiOutput("selectSIGset")),
-                                 
+                                 column(2,selectInput("edgeSIG","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
+                             ),
+                             fluidRow(
+                               #column(4,uiOutput("choosesquareSIG"),offset=.33),
                                
-                               column(2,selectInput("edgeSIG","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
+                               column(4,selectInput("studySIG2","Choose study",studies,selected=studies[1],multiple=FALSE)),
+                               column(4,uiOutput("selectSIGset2")),
+                               column(2,selectInput("edgeSIG2","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
                              ),
                              fluidRow(
                                column(6,sliderInput("defSig","define signature",50,8000,100),offset=.33),
@@ -379,7 +385,7 @@ ui<-fluidPage(
                       tags$head(tags$style("#radar{height:85vh !important; overflow-y: scroll}")),
                       tags$head(tags$style("#intracor{height:85vh !important; overflow-y: scroll}")),
                       tags$head(tags$style("#MEvar{height:85vh !important;}")),
-                      tags$head(tags$style("#bipartite{height:85vh !important;}")),
+                      tags$head(tags$style("#projections{height:85vh !important;}")),
                       tags$head(tags$style("#sankey{height:85vh !important;}")),
                       tags$head(tags$style("#modcor{height:85vh !important;overflow-y: scroll}")),
                   h3("Datasets",style="color:#FF0000"),
@@ -644,7 +650,7 @@ ui<-fluidPage(
                                          tabPanel("moduleEdgesMM",DT::dataTableOutput('moduleEdgesMM')),
                                          tabPanel("wgcna",plotOutput("wgcnacol")),
                                          tabPanel("Virtual Cells",uiOutput("cellmatrixMeta")),
-                                         tabPanel("Ratio Farm",plotOutput("ratioFarm")))
+                                         tabPanel("Cell type ratios",plotOutput("ratioFarm")))
                              
                     )
                     
@@ -700,8 +706,12 @@ server <- shinyServer(function(input, output) {
    #Signatures
    studySIGfun<-reactive({input$studySIG})
    squareSIGfun<-reactive({c(input$datasetsSIG)})
-   
    edgeSIGfun<-reactive({input$edgeSIG})
+   
+   studySIGfun2<-reactive({input$studySIG2})
+   squareSIGfun2<-reactive({c(input$datasetsSIG2)})
+   edgeSIGfun2<-reactive({input$edgeSIG2})
+   
    defSigfun<-reactive({input$defSig})
    
    whichSIGfun<-reactive({input$whichsig})
@@ -957,6 +967,13 @@ server <- shinyServer(function(input, output) {
      print(studySIGfun())
      print(setlistlist[[as.numeric(studySIGfun())]])
      selectInput("datasetsSIG","Choose dataset",setlistlist[[as.numeric(studySIGfun())]],selected=setlistlist[[1]],multiple=FALSE)
+   })
+   output$selectSIGset2<-renderUI({
+     print("doing SIGset2")
+     print("studySIGfun2()")
+     print(studySIGfun2())
+     print(setlistlist[[as.numeric(studySIGfun2())]])
+     selectInput("datasetsSIG2","Choose dataset",setlistlist[[as.numeric(studySIGfun2())]],selected=setlistlist[[1]],multiple=FALSE)
    })
    
    
@@ -1450,29 +1467,37 @@ server <- shinyServer(function(input, output) {
      setlistSIG<-setlistnameslist[[reacstudySIG]]
      squareSIG<-setlistSIG[[reacsetSIG]]
      
+     reacstudySIG2<-as.numeric(studySIGfun2())
+     reacsetSIG2<-as.numeric(squareSIGfun2())
+     reacedgeSIG2<-as.numeric(edgeSIGfun2())
+     studySIG2<-names(studies)[reacstudySIG2]
+     setlistSIG2<-setlistnameslist[[reacstudySIG2]]
+     squareSIG2<-setlistSIG2[[reacsetSIG2]]
+     
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
      res<-signatureQuery()
      
      #get individuals
-     query<-paste("MATCH (p:person {square:'",squareSIG,"'}) RETURN p.name AS name, p.class1 AS class1, p.class2 AS class2",sep="")
+     query<-paste("MATCH (p:person {square:'",squareSIG2,"'}) RETURN p.name AS name, p.class1 AS class1, p.class2 AS class2",sep="")#debug
      people<-cypher(graph,query)
      
      print("people")
      print(people)
-     print(questions[[squareSIG]]$pathway2[[1]])
+     print(questions[[squareSIG2]]$pathway2[[1]])#debug
      edges=list(
-       "edge1"=people[which(people$class2==questions[[squareSIG]]$pathway2[[1]]),],
-       "edge2"=people[which(people$class2==questions[[squareSIG]]$pathway2[[2]]),],
-       "edge3"=people[which(people$class1==questions[[squareSIG]]$pathway1[[1]]),],
-       "edge4"=people[which(people$class1==questions[[squareSIG]]$pathway1[[2]]),],
-       "edge5"=people[which(people$class1==questions[[squareSIG]]$pathway1[[1]]|people$class1==questions[[squareSIG]]$pathway1[[2]]),] 
+       "edge1"=people[which(people$class2==questions[[squareSIG2]]$pathway2[[1]]),],
+       "edge2"=people[which(people$class2==questions[[squareSIG2]]$pathway2[[2]]),],
+       "edge3"=people[which(people$class1==questions[[squareSIG2]]$pathway1[[1]]),],
+       "edge4"=people[which(people$class1==questions[[squareSIG2]]$pathway1[[2]]),],
+       "edge5"=people[which(people$class1==questions[[squareSIG2]]$pathway1[[1]]|people$class1==questions[[squareSIG2]]$pathway1[[2]]),] 
      )
      
      print("edges")
      print(edges)
      
-     exprdata<-eval(parse(text=squareSIG))
+     #exprdata<-eval(parse(text=squareSIG))#debug
+     exprdata<-eval(parse(text=squareSIG2))#debug
      sigvec<-res$nuID
      if(class(exprdata)=="LumiBatch"){
        data.v<-lumiT(exprdata,simpleOutput=FALSE)
@@ -1498,13 +1523,13 @@ server <- shinyServer(function(input, output) {
      print(pData(heatdata.all)[,"sample_name"])
      colnames(heatdata.all)<-pData(heatdata.all)[,"sample_name"]
      
-     print(edges[[reacedgeSIG]])
+     print(edges[[reacedgeSIG2]])
      
-     print(edges[[reacedgeSIG]]$name)
+     print(edges[[reacedgeSIG2]]$name)
      
-     heatdata<-exprs(heatdata.all)[sigvec,edges[[reacedgeSIG]]$name]
+     heatdata<-exprs(heatdata.all)[sigvec,edges[[reacedgeSIG2]]$name]
      print("signature data selected")
-      annotation<-edges[[reacedgeSIG]]
+      annotation<-edges[[reacedgeSIG2]]
       rownames(annotation)<-annotation$name
       annotation<-annotation[,2:3]
       print("annotation")
@@ -1818,7 +1843,10 @@ server <- shinyServer(function(input, output) {
      if(ncol(res.cellprop4)>1){
      plot2<-ggradar2(res.cellprop4,grid.max=1,grid.min=-1, grid.mid=0,values.radar = c("-1","0","1"),plot.title = "cellprop cor",axis.label.size = 4)}else{plot2<-ggtext("NOTHING")}
      
-     }else{plot2<-ggtext("NOTHING")}
+     }else{
+       plot2<-ggtext("NOTHING")
+       plot2a<-ggtext("NOTHING")
+       }
      
      
      ###################
@@ -3734,7 +3762,8 @@ server <- shinyServer(function(input, output) {
      #cex calculation
      cexval1<-3*sqrt(28/ncol(plotMatrix))
      cexval2<-2*sqrt(120/nrow(plotMatrix))
-     
+     print("ready to plot")
+     print(head(plotMatrix))
      cur_dev <- dev.cur()
      pheatout <- pheatmap(plotMatrix,col=blueWhiteRed(60),breaks=seq(floor(-breaksvals),ceiling(breaksvals),length.out=61),fontsize_col=9+cexval1,fontsize_row=9+cexval2)
      dev.set(cur_dev)
