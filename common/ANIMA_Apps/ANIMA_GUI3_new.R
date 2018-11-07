@@ -1338,7 +1338,8 @@ server <- shinyServer(function(input, output) {
    
    #Signatures####
    signatureQuery<-reactive({
-     
+     sliderval1<-input$volcanoFC
+     sliderval2<-input$volcanoSIG
      reacstudySIG<-as.numeric(studySIGfun())
      print("reacstudySIG")
      print(reacstudySIG)
@@ -1389,7 +1390,10 @@ server <- shinyServer(function(input, output) {
    })
    
    enrichfun<-reactive({
+     sliderval1<-input$volcanoFC
+     sliderval2<-input$volcanoSIG
      sigresult.trunc<-signatureQuery()
+     sigresult.trunc<-subset(sigresult.trunc, abs(logfc) > sliderval1 & -log10(p.adjPVAL))
      head(sigresult.trunc)
      nuIDlist<-sigresult.trunc$nuID
      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
@@ -1399,7 +1403,10 @@ server <- shinyServer(function(input, output) {
    })
    
    gseafun<-reactive({
+     sliderval1<-input$volcanoFC
+     sliderval2<-input$volcanoSIG
      sigresult.trunc<-signatureQuery()
+     sigresult.trunc<-subset(sigresult.trunc, abs(logfc) > sliderval1 & -log10(p.adjPVAL))
      head(sigresult.trunc)
      nuIDlist<-sigresult.trunc$nuID
      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
@@ -1419,7 +1426,13 @@ server <- shinyServer(function(input, output) {
    })
    
    
-   output$sigTable1<-DT::renderDataTable(datatable(signatureQuery()),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15)) 
+   output$sigTable1<-DT::renderDataTable({
+     sliderval1<-input$volcanoFC
+     sliderval2<-input$volcanoSIG
+     res<-signatureQuery()
+     res<-subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 )
+     datatable(res)},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15) 
+     )
    
    output$volcano<-renderPlot({
      reacstudySIG<-as.numeric(studySIGfun())
@@ -1477,7 +1490,7 @@ server <- shinyServer(function(input, output) {
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
      res<-signatureQuery()
-     
+     res<-subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 )
      #get individuals
      query<-paste("MATCH (p:person {square:'",squareSIG2,"'}) RETURN p.name AS name, p.class1 AS class1, p.class2 AS class2",sep="")#debug
      people<-cypher(graph,query)
@@ -1503,7 +1516,7 @@ server <- shinyServer(function(input, output) {
        data.v<-lumiT(exprdata,simpleOutput=FALSE)
        
      }else{
-       data.v<-lumiT(datalist[[i]],simpleOutput=FALSE,method="log2")
+       data.v<-lumiT(exprdata,simpleOutput=FALSE,method="log2")
        
      }
      #Quantile normalise
@@ -1521,20 +1534,29 @@ server <- shinyServer(function(input, output) {
      print("head(exprs(heatdata.all))")
      print(head(exprs(heatdata.all)))
      print(pData(heatdata.all)[,"sample_name"])
+     
      colnames(heatdata.all)<-pData(heatdata.all)[,"sample_name"]
      
      print(edges[[reacedgeSIG2]])
      
      print(edges[[reacedgeSIG2]]$name)
+     print("before")
+     print("newsigvec")
+     sigvecTV<-sigvec%in%rownames(exprs(heatdata.all))
+     newsigvec<-sigvec[sigvecTV]
      
-     heatdata<-exprs(heatdata.all)[sigvec,edges[[reacedgeSIG2]]$name]
+     heatdata<-exprs(heatdata.all)[newsigvec,edges[[reacedgeSIG2]]$name]
+     
+     
      print("signature data selected")
       annotation<-edges[[reacedgeSIG2]]
+      print("annotation")
+      print(annotation)
       rownames(annotation)<-annotation$name
       annotation<-annotation[,2:3]
       print("annotation")
       print(annotation)
-      rowAnn<-as.data.frame(res$module)
+      rowAnn<-as.data.frame(res$module[sigvecTV])
       colnames(rowAnn)<-"module"
       print("res")
       print(res)
@@ -1798,7 +1820,7 @@ server <- shinyServer(function(input, output) {
      #res.cellex4$group<-"cellex"
      
      
-     plot1<-ggradar2(res.cellex4,grid.max=5,values.radar = c("0","1","5"),plot.title = "cellEx sig",axis.label.size = 4)}else{plot1<-ggtext("NOTHING")}
+     plot1<-ggradar(res.cellex4,grid.max=5,values.radar = c("0","1","5"),plot.title = "cellEx sig",axis.label.size = 4)}else{plot1<-ggtext("NOTHING")}
      
      ###################
      
@@ -1828,7 +1850,7 @@ server <- shinyServer(function(input, output) {
      
      res.cellprop4<-t(res.cellprop3)
      print(res.cellprop4)
-     plot2a<-ggradar2(res.cellprop4,grid.max=10,values.radar = c("0","1","10"),plot.title = "cellprop sig",axis.label.size = 4)
+     plot2a<-ggradar(res.cellprop4,grid.max=10,values.radar = c("0","1","10"),plot.title = "cellprop sig",axis.label.size = 4)
      print("debug3")
      res.cellprop3b<-res.cellprop[which(res.cellprop$pr!=0),]
      res.cellprop3c<-res.cellprop3b[order(res.cellprop3b$pr),]
@@ -1841,7 +1863,7 @@ server <- shinyServer(function(input, output) {
      colnames(res.cellprop4)<-res.cellprop3c$name
      print(res.cellprop4)
      if(ncol(res.cellprop4)>1){
-     plot2<-ggradar2(res.cellprop4,grid.max=1,grid.min=-1, grid.mid=0,values.radar = c("-1","0","1"),plot.title = "cellprop cor",axis.label.size = 4)}else{plot2<-ggtext("NOTHING")}
+     plot2<-ggradar(res.cellprop4,grid.max=1,grid.min=-1, grid.mid=0,values.radar = c("-1","0","1"),plot.title = "cellprop cor",axis.label.size = 4)}else{plot2<-ggtext("NOTHING")}
      
      }else{
        plot2<-ggtext("NOTHING")
@@ -1895,7 +1917,7 @@ server <- shinyServer(function(input, output) {
      print(res.pheno4[,1])
      
      if(ncol(res.pheno4)>1){
-     plot3a<-ggradar2(res.pheno4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pheno sig",axis.label.size = 4)}else{plot3a<-ggtext("NOTHING")}
+     plot3a<-ggradar(res.pheno4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pheno sig",axis.label.size = 4)}else{plot3a<-ggtext("NOTHING")}
      
      }else{plot3a<-ggtext("NOTHING")}
      
@@ -1936,7 +1958,7 @@ server <- shinyServer(function(input, output) {
      print(res.pheno4[,1])
      
      if(ncol(res.pheno4)>1){
-     plot3<-ggradar2(res.pheno4,grid.max=1,grid.min=-1, grid.mid=0,values.radar = c("-1","0","1"),plot.title = "pheno cor",axis.label.size = 4)}else{plot3<-ggtext("NOTHING")}
+     plot3<-ggradar(res.pheno4,grid.max=1,grid.min=-1, grid.mid=0,values.radar = c("-1","0","1"),plot.title = "pheno cor",axis.label.size = 4)}else{plot3<-ggtext("NOTHING")}
      
      
      }else{plot3<-ggtext("NOTHING")}
@@ -1978,7 +2000,7 @@ server <- shinyServer(function(input, output) {
      res.pw4<-t(res.pw3c$SIG)
      
      colnames(res.pw4)<-rownames(res.pw3c)
-     plot4<-ggradar2(res.pw4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pathway sig",axis.label.size = 4)}else{plot4<-ggtext("NOTHING")}
+     plot4<-ggradar(res.pw4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pathway sig",axis.label.size = 4)}else{plot4<-ggtext("NOTHING")}
      
      #####
      grid.arrange(plot1,plot2a,plot2,plot3a,plot3,plot4,nrow=2)
@@ -2994,6 +3016,14 @@ server <- shinyServer(function(input, output) {
      print(edgeCellcorfun())
      
      cellCore3(study=studyCC,squareC=squareCC,edgeC=as.character(reacedgeCC),cellC=cellCfun(),pwm="other",PalWang=FALSE)
+     
+     # print(dev.cur())
+     # cur_dev <- dev.cur()
+     # #new
+     # ccc<-cellCore3(study=studyCC,squareC=squareCC,edgeC=as.character(reacedgeCC),cellC=cellCfun(),pwm="other",PalWang=FALSE)
+     # dev.set(cur_dev)
+     # print(ccc)
+     
    })
    
    #cellmatrix####
