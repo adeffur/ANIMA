@@ -59,6 +59,8 @@ library(ggpubr)
 library(ggradar)
 library(gridExtra)
 
+library(dplyr)
+
 scripts<-system(paste("ls","~/scripts"),intern=TRUE)
 datafiles<-system(paste("ls",datadir),intern=TRUE)
 excl<-grep("86|393",datafiles)
@@ -129,6 +131,7 @@ source(file.path(dir.R.files,"igraph_plotter_newer.R"),local=TRUE)
 source(file.path(dir.R.files,"moduleMeta.R"),local=TRUE)
 source(file.path("~/source_data/questions.R"),local=TRUE)
 source(file.path(dir.R.files,"probe_boxplot4.R"),local=TRUE)
+source(file.path(dir.R.files,"probe_boxplot5.R"),local=TRUE)
 source(file.path(dir.R.files,"mwat.R"),local=TRUE)
 
 ##Required for G1
@@ -329,7 +332,7 @@ ui<-fluidPage(
                       tags$head(tags$style("#boxplot{height:100vh !important; overflow-y: scroll}")),
                       h3(paste('boxplot:',project),style="color:#FF0000"),
                       fluidRow(column(8,uiOutput("choosesquareBXP"),offset=.33),
-                               column(4,selectInput("orderP","Boxplot order",list("Group contrast 1"="c(1,3,2,4)","Group contrast2"="c(1,2,3,4)"),selected=1,multiple=FALSE))),
+                               column(4,selectInput("orderP","Boxplot order",list("Group contrast 1"="c(1,3,2,4)","Group contrast 2"="c(1,2,3,4)"),selected=1,multiple=FALSE))),
                       fluidRow(
                         column(8,textInput("regex","Write regex",value="STAT.*")),
                         column(4,sliderInput("plotheight","plot height",1000,6000,1000,500),offset=0.33)
@@ -1212,8 +1215,9 @@ server <- shinyServer(function(input, output) {
      regex<-useregex()
      print(paste("regex:",regex))
      print("command")
-     print(paste("probe_boxplot4('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),")",sep=""))
-     eval(parse(text=paste("probe_boxplot4('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),",orderP=",orderPfun(),")",sep="")))
+     print(paste("probe_boxplot4('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),")",sep=""))#debug
+     #eval(parse(text=paste("probe_boxplot4('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),",orderP=",orderPfun(),")",sep="")))#debug
+     eval(parse(text=paste("probe_boxplot5('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),",orderP=",orderPfun(),")",sep="")))#debug
      if(input$returnpdf==TRUE){
        pdf("plot.pdf",width=16,height=as.numeric(input$plotheight)/100,onefile=FALSE)
        eval(parse(text=paste("probe_boxplot4('",square,"','",regex,"',miny=",as.numeric(yminfun()),",maxy=",as.numeric(ymaxfun()),",orderP=",orderPfun(),")",sep="")))
@@ -1470,7 +1474,6 @@ server <- shinyServer(function(input, output) {
    
    output$heatmap<-renderPlot({
      
-     
      scale<-scaleSIGfun()
      
      reacstudySIG<-as.numeric(studySIGfun())
@@ -1491,6 +1494,24 @@ server <- shinyServer(function(input, output) {
      sliderval2<-input$volcanoSIG
      res<-signatureQuery()
      res<-subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 )
+     
+     #get wgcna modules for selected probes from visualised dataset
+     probesvis<-res$nuID
+     query2<-paste("MATCH (p:PROBE {square:'",squareSIG2,"',edge:",reacedgeSIG2,"})-[r]-(n:wgcna) RETURN p.name as nuID2, n.name as wgcna2",sep="")
+     res2<-cypher(graph,query2)
+     
+     print("head(res) before merging")
+     print(head(res))
+     
+     print("head(res2) before merging")
+     print(head(res2))
+     
+     res<-merge(res,res2,by.x="nuID",by.y="nuID2",x.all=TRUE,y.all=FALSE)
+     
+     print("head(res) after merging")
+     print(head(res))
+     
+     
      #get individuals
      query<-paste("MATCH (p:person {square:'",squareSIG2,"'}) RETURN p.name AS name, p.class1 AS class1, p.class2 AS class2",sep="")#debug
      people<-cypher(graph,query)
@@ -1556,7 +1577,10 @@ server <- shinyServer(function(input, output) {
       annotation<-annotation[,2:3]
       print("annotation")
       print(annotation)
-      rowAnn<-as.data.frame(res$module[sigvecTV])
+      #rowAnn<-as.data.frame(res$module[sigvecTV])
+      #rowAnn<-as.data.frame(res$wgcna2[sigvecTV])
+      rowAnn<-as.data.frame(res$wgcna2)
+      
       colnames(rowAnn)<-"module"
       print("res")
       print(res)
@@ -1575,12 +1599,12 @@ server <- shinyServer(function(input, output) {
      if(nrow(res)<100){boolrow<-TRUE}else{boolrow<-FALSE}
      
      print("debug")
-     print(res$module)
-     print(as.factor(res$module))
-     print(levels(as.factor(res$module)))
-     print(list("module"=levels(as.factor(res$module))))
+     print(res$wgcna2)
+     print(as.factor(res$wgcna2))
+     print(levels(as.factor(res$wgcna2)))
+     print(list("module"=levels(as.factor(res$wgcna2))))
      
-     levs<-levels(as.factor(res$module))
+     levs<-levels(as.factor(res$wgcna2))
      newlevs<-structure(levs, names=as.character(levs))
      print(levs)
      print(newlevs)
@@ -2984,7 +3008,7 @@ server <- shinyServer(function(input, output) {
      nodeproj=nodefun()
      edgeproj=edgefun()
      
-     igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=T,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+     igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
      #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
      
      
