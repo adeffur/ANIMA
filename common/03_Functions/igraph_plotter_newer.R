@@ -72,7 +72,7 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
   print(nrow(alledges))
   alledges<-alledges[which(alledges$source%in%allnodes2$node_id&alledges$target%in%allnodes2$node_id),]
   print(nrow(alledges))
-  
+  print(head(alledges))
   #Step 3: optionally export the nodes and edges in a format that can easily be imported into Cytoscape
   if (csv==TRUE){
     write.csv(allnodes,file.path(prefix,paste(filename,"_nodes.csv",sep="")),quote=F)
@@ -83,12 +83,13 @@ igraph_plotter<-function(query.base,nodelist,edgetrips,rimpar,plot=TRUE,csv=FALS
   #if(plot==FALSE){stop("No plot generated! Look for csv files!")}
   
   #Step 4. Create the igraph object
-  ig<-graph.data.frame(alledges,directed = FALSE,vertices=allnodes2)
+  #ig<-graph.data.frame(alledges,directed = FALSE,vertices=allnodes2)
+  ig<-graph_from_data_frame(alledges,directed = FALSE,vertices=allnodes2)
   kindcol<-factor(V(ig)$kind)
   
   #Step 5. Assign standard colours to the various node types (colours match the figures in the main manuscript)
-  ty<-c("baylor","cellEx","cellprop","ImmunePW","PalWangPW","pheno","PROBE","PROBETYPE","reactomePW","SYMBOL","wgcna","CELL","flowcellprop","cellpropFprop","bigc")
-  tycol<-c("darkgoldenrod1","chartreuse1","chartreuse3","cadetblue1","cadetblue2","plum1","azure","gray88","cadetblue2","yellow","cornsilk2","seagreen2","springgreen2","springgreen3","pink")
+  ty<-c("baylor","cellEx","cellprop","ImmunePW","PalWangPW","pheno","PROBE","PROBETYPE","reactomePW","SYMBOL","wgcna","CELL","flowcellprop","cellpropFprop","person","personpheno")
+  tycol<-c("darkgoldenrod1","chartreuse1","chartreuse3","cadetblue1","cadetblue2","plum1","azure","gray88","cadetblue2","yellow","cornsilk2","seagreen2","springgreen2","springgreen3","pink","lavender")
   dicti<-cbind(ty,tycol)
   
   start<-V(ig)$kind
