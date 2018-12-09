@@ -11,6 +11,9 @@
 #corrected paths for tmp.csv files that go into import
 #simplified queries for load csv w.r.t import target location
 
+#toDo:
+#link pheno and personPheno with this: 'MATCH (a:personPheno),(b:pheno) WHERE a.name = b.name AND a.square = b.square CREATE (a)-[r:is]->(b) RETURN type(r)'
+
 #Setup####
 
   #Current date string used for versioning output
