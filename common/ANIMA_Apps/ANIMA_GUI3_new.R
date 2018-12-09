@@ -374,8 +374,12 @@ ui<-fluidPage(
                                column(2,selectInput("scale","scale",c("none","row","column")))
                              ),
                              fluidRow(
-                               column(5,sliderInput("volcanoFC","Log2 fold change",0,5,0,step=0.05),offset=.33),
-                               column(5,sliderInput("volcanoSIG","significance",0,30,0,step=.5))
+                               column(5,sliderInput("volcanoFC","Log2 fold change: upper bound",-5,5,0,step=0.05),offset=.33),
+                               column(5,sliderInput("volcanoSIG","significance: upper bound",0,30,0,step=.5))
+                             ),
+                             fluidRow(
+                               column(5,sliderInput("volcanoFClow","Log2 fold change: lower bound",-5,5,0,step=0.05),offset=.33),
+                               column(5,sliderInput("volcanoSIGlow","significance: lower bound",0,30,0,step=.5))
                              )
                              ),
                     #INTERFACE ELEMENTS: Tabs
@@ -415,6 +419,10 @@ ui<-fluidPage(
                     column(2,sliderInput("legendcex","Legend size ",0.5,2,1,0.001)),
                     column(2,sliderInput("vertexsize","Vertex size",2,30,15,0.1)),
                     column(2,sliderInput("edgeWidth","Edge width",0.5,5,0.5,0.1))
+                  ),
+                  fluidRow(
+                    column(3,sliderInput("phenoWeightLow","phenoWeightLow",0,1,0,0.05)),
+                    column(3,sliderInput("phenoWeightHigh","phenoWeightHigh",0,1,1,0.05))
                   ),
                   h4("Module-phenotype correlation",style="color:#0000FF"),
                   fluidRow(
@@ -750,6 +758,8 @@ server <- shinyServer(function(input, output) {
    legendcexfun<-reactive({input$legendcex})
    vertexsizefun<-reactive({input$vertexsize})
    ewf<-reactive({input$edgeWidth})
+   phenoWeightLowfun<-reactive({input$phenoWeightLow})
+   phenoWeightHighfun<-reactive({input$phenoWeightHigh})
    #igraph_plotter controls meta-analysis
    layoutfun1<-reactive({input$layout1})
    vlc1<-reactive({input$vlc1})
@@ -1344,6 +1354,8 @@ server <- shinyServer(function(input, output) {
    signatureQuery<-reactive({
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
      reacstudySIG<-as.numeric(studySIGfun())
      print("reacstudySIG")
      print(reacstudySIG)
@@ -1393,11 +1405,31 @@ server <- shinyServer(function(input, output) {
      
    })
    
+   ##
+   
+   ##
+   
    enrichfun<-reactive({
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
+     print("whichSIGfun()")
+     print(whichSIGfun())
+     
      sigresult.trunc<-signatureQuery()
-     sigresult.trunc<-subset(sigresult.trunc, abs(logfc) > sliderval1 & -log10(p.adjPVAL))
+     
+     if(whichSIGfun()!="all"){
+       sigresult.trunc<-subset(sigresult.trunc,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
+     }else{
+       sigresult.trunc<-subset(sigresult.trunc, (logfc > abs(sliderval3) | logfc < -abs(sliderval3)) &
+                                 (logfc < abs(sliderval1) & logfc > -abs(sliderval1)) & 
+                                 -log10(p.adjPVAL) > sliderval4 &
+                                 -log10(p.adjPVAL) < sliderval2 
+                               
+       )
+     }
+     #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      head(sigresult.trunc)
      nuIDlist<-sigresult.trunc$nuID
      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
@@ -1409,8 +1441,22 @@ server <- shinyServer(function(input, output) {
    gseafun<-reactive({
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
      sigresult.trunc<-signatureQuery()
-     sigresult.trunc<-subset(sigresult.trunc, abs(logfc) > sliderval1 & -log10(p.adjPVAL))
+     
+     if(whichSIGfun()!="all"){
+       sigresult.trunc<-subset(sigresult.trunc,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
+     }else{
+       sigresult.trunc<-subset(sigresult.trunc, (logfc > abs(sliderval3) | logfc < -abs(sliderval3)) &
+                      (logfc < abs(sliderval1) & logfc > -abs(sliderval1)) & 
+                      -log10(p.adjPVAL) > sliderval4 &
+                      -log10(p.adjPVAL) < sliderval2 
+                    
+       )
+     }
+     
+     #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      head(sigresult.trunc)
      nuIDlist<-sigresult.trunc$nuID
      entrezlist<-nuID2EntrezID(nuIDlist,lib.mapping='lumiHumanIDMapping')
@@ -1433,9 +1479,23 @@ server <- shinyServer(function(input, output) {
    output$sigTable1<-DT::renderDataTable({
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
      res<-signatureQuery()
-     res<-subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 )
-     datatable(res)},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15) 
+     
+     if(whichSIGfun()!="all"){
+       res2<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
+     }else{
+       res2<-subset(res, (logfc > abs(sliderval3) | logfc < -abs(sliderval3)) &
+                      (logfc < abs(sliderval1) & logfc > -abs(sliderval1)) & 
+                      -log10(p.adjPVAL) > sliderval4 &
+                      -log10(p.adjPVAL) < sliderval2 
+                    
+       )
+     }
+     
+     #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
+     datatable(res2)},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15) 
      )
    
    output$volcano<-renderPlot({
@@ -1448,11 +1508,36 @@ server <- shinyServer(function(input, output) {
      
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
+     #res<-signatureQuery()
+     
      res<-signatureQuery()
+     
+     if(whichSIGfun()!="all"){
+       res2<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
+     }else{
+       res2<-subset(res, (logfc > abs(sliderval3) | logfc < -abs(sliderval3)) &
+                         (logfc < abs(sliderval1) & logfc > -abs(sliderval1)) & 
+                         -log10(p.adjPVAL) > sliderval4 &
+                         -log10(p.adjPVAL) < sliderval2 
+                         
+                      )
+     }
+     
+     #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
+     
      vp<-ggplot(res,aes(logfc,-log10(p.adjPVAL)))+
        geom_point(aes(col=logfc),size=9,alpha=0.4)+
        scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
-       geom_text_repel(aes(label=SYMBOL),data=subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 ),col="darkslategrey",size=6) +
+       #geom_text_repel(aes(label=SYMBOL),data=subset(res, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4 ),col="darkslategrey",size=6) +
+       geom_text_repel(aes(label=SYMBOL),data=res2,col="darkslategrey",size=6) +
+       geom_vline(xintercept=sliderval1, linetype="dashed", color = "red") +
+       {if(whichSIGfun()=="all") geom_vline(xintercept=-sliderval1, linetype="dashed", color = "red")} +
+       geom_vline(xintercept=sliderval3, linetype="dashed", color = "blue") +
+       {if(whichSIGfun()=="all") geom_vline(xintercept=-sliderval3, linetype="dashed", color = "blue")} +
+       geom_hline(yintercept=sliderval2, linetype="dashed", color = "red") +
+       geom_hline(yintercept=sliderval4, linetype="dashed", color = "blue") +
        #theme_tufte() +
        theme_light() +
        #theme_minimal() +
@@ -1492,8 +1577,26 @@ server <- shinyServer(function(input, output) {
      
      sliderval1<-input$volcanoFC
      sliderval2<-input$volcanoSIG
+     sliderval3<-input$volcanoFClow
+     sliderval4<-input$volcanoSIGlow
      res<-signatureQuery()
-     res<-subset(res, abs(logfc) > sliderval1 & -log10(p.adjPVAL) > sliderval2 )
+     
+     
+     res<-signatureQuery()
+     
+     if(whichSIGfun()!="all"){
+       res<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
+     }else{
+       res<-subset(res, (logfc > abs(sliderval3) | logfc < -abs(sliderval3)) &
+                      (logfc < abs(sliderval1) & logfc > -abs(sliderval1)) & 
+                      -log10(p.adjPVAL) > sliderval4 &
+                      -log10(p.adjPVAL) < sliderval2 
+                    
+       )
+     }
+     
+     
+     #res<-subset(res, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4 )
      
      #get wgcna modules for selected probes from visualised dataset
      probesvis<-res$nuID
@@ -3007,9 +3110,16 @@ server <- shinyServer(function(input, output) {
      rimpar="diffME"
      nodeproj=nodefun()
      edgeproj=edgefun()
-     
-     igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
-     #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+     if(nodefun2()!="pheno"){
+       igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+       #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+       
+     }else{
+       query.base<-paste(query.base," WHERE r.Rsq > ",phenoWeightLowfun()," AND r.Rsq <= ",phenoWeightHighfun()," ",sep="")
+       igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+       #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+       
+     }
      
      
    })
