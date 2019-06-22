@@ -4,7 +4,7 @@
 #FROM rocker/ropensci:3.4.1.
 #FROM rocker/verse:3.4.3
 #FROM rocker/verse:devel
-FROM rocker/verse:3.5.0
+FROM rocker/verse:latest
 
 #This is me
 MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
@@ -37,6 +37,8 @@ RUN rm -rf /tmp/*.rds \
     networkD3 \
     tm \
     wordcloud \
+    shinycssloaders \
+    ggpubr \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 #install beamer
@@ -82,24 +84,27 @@ RUN rm -rf /tmp/*.rds \
 
 #bioconductor packages
 
-RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite();bio<-c("lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");biocLite(bio)' \
+RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite();bio<-c("Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");biocLite(bio)' \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 #install more from CRAN
-RUN rm -rf /tmp/*.rds \
-&& install2.r --error \
-    -r http://cran.rstudio.com \
-    CluMix \
-&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+#RUN rm -rf /tmp/*.rds \
+#&& install2.r --error \
+#    -r http://cran.rstudio.com \
+#    CluMix \
+#&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 #RNeo4j from GitHub
 RUN Rscript -e 'devtools::install_github("nicolewhite/RNeo4j")' \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
+RUN Rscript -e 'devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
 #OOmpa packages
-RUN Rscript -e 'source("http://bioinformatics.mdanderson.org/OOMPA/oompaLite.R");oompaLite()' \
+RUN Rscript -e 'source("http://silicovore.com/OOMPA/oompaLite.R");oompaLite()' \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 #CellMix
-RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite("CellMix", siteRepos = "http://web.cbio.uct.ac.za/~renaud/CRAN")' \
+RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite("CellMix",siteRepos = "http://web.cbio.uct.ac.za/~renaud/CRAN")' \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds

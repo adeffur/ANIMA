@@ -10,6 +10,7 @@
  # install.packages("shinycssloaders")
  # install.packages("ggpubr")
  # devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)
+ # devtools::install_github("rstudio/gt",dependencies=TRUE)
  # install.packages("shinythemes")
 #File paths
 tabledir="~/output/project/tabular"
@@ -40,6 +41,7 @@ library(plyr)
 library(xtable)
 
 library(DT)
+library(data.table)
 library(pheatmap)
 library(ReactomePA)
 library(illuminaHumanv3.db)
@@ -125,7 +127,7 @@ dir.annot<-file.path(dir.root,"source_data")
 
 #Individual subject distributions based on 2 modules
 
-buildlisting<-system(paste("ls","~/output/build/"),intern=TRUE)
+#buildlisting<-system(paste("ls","~/output/build/"),intern=TRUE)
 
 source(file.path(dir.R.files,"igraph_plotter_newer.R"),local=TRUE)
 source(file.path(dir.R.files,"moduleMeta.R"),local=TRUE)
@@ -397,15 +399,15 @@ ui<-fluidPage(
                       tags$head(tags$style("#modcor{height:85vh !important;overflow-y: scroll}")),
                   h3("Datasets",style="color:#FF0000"),
                   fluidRow(
-                  column(4,uiOutput("allsubsetnames")),
+                    column(4,uiOutput("choosesquare"),offset=.33),
+                    column(2,selectInput("edge","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
+                  ),
+                  fluidRow(
+                  #column(4,uiOutput("allsubsetnames")),
                   #column(4,selectInput("doIntracor","intracor?",c(FALSE,TRUE),selected=FALSE,multiple=FALSE)),
                   #column(4,selectInput("matchedset","Choose matchedset",c("Q_9_blood.PCF.defTB","Q_10_blood.PCF.probTB","Q_11_blood.PCF.defPC","Q_12_blood.PCF.probPC","Q_13_blood.PCF.HIVneg","Q_14_blood.PCF.HIVpos","Q_15_blood.PCF.HIVposHD"),selected="Q_9_blood.PCF.defTB",multiple=FALSE),offset=.33)
                   column(4,selectInput("matchedset","Choose matchedset",c(matchedsets),selected=matchedsets[1],multiple=FALSE),offset=.33)#GBP
                   
-                  ),
-                  fluidRow(
-                    column(4,uiOutput("choosesquare"),offset=.33),
-                    column(2,selectInput("edge","Choose edge",1:5,selected=5,multiple=FALSE),offset=.33)
                   ),
                   h3("Single module",style="color:#FF0000"),
                   h4("Select WGCNA module",style="color:#0000FF"),
@@ -573,6 +575,12 @@ ui<-fluidPage(
                     #pheno
                     tabPanel("Phenotype",
                              tabsetPanel(
+                               tabPanel("Subject numbers",tableOutput('subjectnumbers')),
+                               tabPanel("allData",DT::dataTableOutput('allphenodata')),
+                               tabPanel("table_NUM",DT::dataTableOutput('tableNUM')),
+                               tabPanel("table_NUM2",tableOutput('tableNUM2')),
+                               tabPanel("table_CAT",DT::dataTableOutput('tableCAT')),
+                               tabPanel("table_CAT2",tableOutput('tableCAT2')),
                                tabPanel("phenoDT",DT::dataTableOutput('phenodatatable')),
                                tabPanel("phenoPlot",uiOutput('phenoPlot')),
                                tabPanel("Summary",tableOutput("summary")),
@@ -690,7 +698,7 @@ server <- shinyServer(function(input, output) {
    phenofun<-reactive({input$pheno})
    methodfun<-reactive({input$method})
    edgefun<-reactive({input$edge})
-   buildfun<-reactive({input$build})
+   #buildfun<-reactive({input$build})
    nodefun<-reactive({input$nodetype_proj})
    nodefun2<-reactive({input$nodetype_proj2})
    plotwhichfun<-reactive({input$plotwhich})
@@ -793,7 +801,8 @@ server <- shinyServer(function(input, output) {
    #SP
    
    output$allsubsetnames<-renderUI({
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
      print("prefix:")
@@ -802,12 +811,13 @@ server <- shinyServer(function(input, output) {
      print(dirlisting)
      print("allsubsetnames")
      print(allsubsetnames)
-     selectInput("build","Choose build",buildlisting,selected=buildlisting[length(buildlisting)],multiple=FALSE)
+     #selectInput("build","Choose build",buildlisting,selected=buildlisting[length(buildlisting)],multiple=FALSE)
    })
    
    output$choosesquare<-renderUI({
      print("invoking input$set in renderUI function:output$choosesquare")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
      selectInput("set","Choose square",allsubsetnames,selected="1",multiple=FALSE)
@@ -815,7 +825,8 @@ server <- shinyServer(function(input, output) {
    
    output$choosesquareBXP<-renderUI({
      print("invoking input$set in renderUI function:output$choosesquareBXP")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
      selectInput("BXPset","Choose square",allsubsetnames,selected="1",multiple=FALSE)
@@ -823,7 +834,8 @@ server <- shinyServer(function(input, output) {
    
    output$choosesquareMACHINE<-renderUI({
      print("invoking input$set in renderUI function:output$choosesquareMACHINE")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      dirlisting<-system(paste("ls",prefix),intern=TRUE)
      allsubsetnames<-dirlisting[grep("Q_",dirlisting)]
      selectInput("MACHINEset","Choose square",allsubsetnames,selected="1",multiple=FALSE)
@@ -848,7 +860,8 @@ server <- shinyServer(function(input, output) {
    
    output$menamegen1<-renderUI({
      print("computing menamegen1")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      print("prefix2:")
      print(prefix)
      print("setfun()")
@@ -863,7 +876,8 @@ server <- shinyServer(function(input, output) {
      })
    output$menamegen2<-renderUI({
      print("computing menamegen2")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("uiline1")
      data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
@@ -875,7 +889,8 @@ server <- shinyServer(function(input, output) {
    output$phenonames<-renderUI({
      print("computing phenonames")
      #print("line1 inside reactive")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("line2")
      data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
@@ -896,7 +911,8 @@ server <- shinyServer(function(input, output) {
    output$subsetdefs1<-renderUI({
      print("computing subsetdefs1")
      #print("line1 inside reactive")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("line2")
      data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
@@ -933,7 +949,8 @@ server <- shinyServer(function(input, output) {
      print("computing subsetdefs2")
      print("line1 inside reactive")
      #print(setfun2())
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #edit debug replaced setfun2 with setfun
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      print("line2")
@@ -1055,6 +1072,494 @@ server <- shinyServer(function(input, output) {
      print(str(res))
      res
    })
+   
+   allphenofun<-reactive({
+     print(questions)
+     square<-squarephenofun()
+     #print(str(pData(eval(parse(text=square)))))
+     print(paste("questions$",square,"$matrixPDname[[1]]",sep=""))
+     filename<-eval(parse(text=(paste("questions$",square,"$matrixPDname[[1]]",sep=""))))
+     mpd<-read.csv(file.path("~/source_data",filename),row.names=1,stringsAsFactors = FALSE)
+     varclass<-mpd["varclass",]
+     print(varclass)
+     numerics<-which(varclass=="n")
+     df<-pData(eval(parse(text=square)))
+     df[,numerics]<-sapply(df[,numerics], as.numeric)
+     df<-Filter(function(x) !(all(x=="")), df)
+     
+     DT <- as.data.table(df)
+     DT[,which(unlist(lapply(DT, function(x)!all(is.na(x))))),with=F]
+   })
+   
+   output$subjectnumbers<-renderTable({
+     square<-squarephenofun()
+     ques<-eval(parse(text=paste("questions$",square,sep="")))
+     out<-eval(parse(text=paste("table(",square,"$",ques$contrast_variable[[1]],",",square,"$",ques$contrast_variable[[2]],")",sep="")))
+     out2<-as.data.frame.matrix(out)
+     out2
+     
+     
+   },striped=TRUE,rownames=TRUE,colnames=TRUE)
+   
+   output$allphenodata<-renderDataTable(allphenofun())
+   
+   
+   
+   tablefunNUM<-reactive({
+     square<-squarephenofun()
+     table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
+                           "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
+     
+     table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
+     
+     count<-0
+     count2<-0
+     # 1. Get vartypes for square
+     query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
+     res<-cypher(graph,query)
+     vartypes<-res[,1]
+     
+     # 2. For loop over vartypes
+     for (vt in vartypes){
+       # 3. Get varsubtypes for vartype
+       
+       query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
+       res2<-cypher(graph,query)
+       varsubtypes<-res2[,1]
+       
+       # 4. For loop over varsubtypes
+       for (vst in varsubtypes){
+         # 5. Get variables for varsubtype
+         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
+         res3<-cypher(graph,query)
+         vars<-res3[,1]
+         # 6. For loop over variables
+         for (var in vars){
+           #count<-count+1
+           # 7. Get data for the variable
+           query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
+                        pp.personName AS sampleID, pp.class1 AS class1, pp.class2 AS class2, pp.value AS value",sep="")
+           data<-cypher(graph,query)
+           
+           print("DEBUG ON")
+           print(square)
+           print(vt)
+           print(vst)
+           print(var)
+           print(head(data))
+           
+           print("DEBUG OFF")
+           
+           # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
+           c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
+           c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
+           needtosplit<-"no"
+           if (length(c1)==length(c2)){
+           if (sum(c1==c2)==length(c1)){
+             data<-data[which(data$class1==sort(unique(data$class1))[1]),]
+             print("debug1")
+             needtosplit<-"no"
+           }else{
+             data<-data
+             print("debug2")
+             needtosplit<-"yes"
+           }
+           }#end lengthcheck
+           
+           #changeindex<-which(c1!=c2)
+           # 9. Define variable class (numeric or character)
+           datavec<-as.numeric(data$value)
+           if (sum(is.na(datavec))==length(datavec)) {
+             data$value<-as.character(data$value)
+           }else{
+             data$value<-as.numeric(data$value)
+           }
+           # 10. if numeric
+           if (class(data$value)=="numeric" & needtosplit == "no"){
+             
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             
+             data$class2<-as.factor(data$class2)
+             alln<-nrow(data)
+             allmed<-median(data$value)
+             alliqr<-IQR(data$value)
+             
+             
+             sum<-data %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=data))
+             
+             if(stats!="fail"&length(class2names)==2){
+                  table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                    }else if(length(class2names)==1) {
+                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
+             }
+             
+           }else if (class(data$value)=="numeric" & needtosplit == "yes"){
+             #split data in 2 
+             splitclasses<-sort(unique(data$class1))
+             
+             #PartA
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             dataS1<-data[which(data$class1==splitclasses[1]),]
+             
+             
+             dataS1$class2<-as.factor(dataS1$class2)
+             alln<-nrow(dataS1)
+             allmed<-median(dataS1$value)
+             alliqr<-IQR(dataS1$value)
+             
+             
+             sum<-dataS1 %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=dataS1))
+             if(stats!="fail"){
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+             }else{
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+             }
+             
+             
+             
+             
+             
+             #PartB
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             dataS2<-data[which(data$class1==splitclasses[2]),]
+             
+             
+             dataS2$class2<-as.factor(dataS2$class2)
+             alln<-nrow(dataS2)
+             allmed<-median(dataS2$value)
+             alliqr<-IQR(dataS2$value)
+             
+             
+             sum<-dataS2 %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=dataS2))
+             if(stats!="fail"){
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+             }else{
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+             }
+             
+             print("hey!")
+           }else if (class(data$value)=="character" & needtosplit == "no"){
+             
+             #remove NA
+             data<-data[which(data$value!=""),]
+             
+             if (nrow(data)>0){
+               data$class2<-as.factor(data$class2)
+               alln<-nrow(data)
+               data$value<-as.factor(data$value)
+               ft<-ftable(class2~value,data=data)
+               if(nrow(ft)>=2){
+                 ft[,1]<-ft[,1]/colSums(ft)[1]
+                 ft[,2]<-ft[,2]/colSums(ft)[2]
+                 statname="Chi-squared test"
+                 
+                 stats<-"fail"
+                 
+                 try(stats<-chisq.test(ft))
+                 
+                 ftdf<-as.data.frame((ft))
+                 class2names<-as.character(levels(ftdf$class2))
+                 ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
+                 ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
+                
+                 #grp1<-paste(paste(ftdf1$value,ftdf1$Freq,sep=":"),collapse="__")
+                 #grp2<-paste(paste(ftdf2$value,ftdf2$Freq,sep=":"),collapse="__")
+                 
+                 grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
+                 grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
+                 
+                 count2<-count2+1
+                 if(stats!="fail"&length(class2names)==2){
+                 table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
+                 }else if(length(class2names)==1){
+                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
+                 }
+               }#endif
+               
+             }#endif
+             
+             
+           }else if (class(data$value)=="character" & needtosplit == "yes"){
+             print("need to split cat!")
+             
+           }else{NULL}
+           
+           
+           
+         }#end vars loop
+       }#end varsubtypes loop  
+     }#end vartypes loop
+     colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
+     colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
+     colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
+     colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
+     table1num
+     
+   })
+   
+   tablefunCAT<-reactive({
+     square<-squarephenofun()
+     table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
+                           "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
+     
+     table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
+     
+     count<-0
+     count2<-0
+     # 1. Get vartypes for square
+     query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
+     res<-cypher(graph,query)
+     vartypes<-res[,1]
+     
+     # 2. For loop over vartypes
+     for (vt in vartypes){
+       # 3. Get varsubtypes for vartype
+       
+       query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
+       res2<-cypher(graph,query)
+       varsubtypes<-res2[,1]
+       
+       # 4. For loop over varsubtypes
+       for (vst in varsubtypes){
+         # 5. Get variables for varsubtype
+         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
+         res3<-cypher(graph,query)
+         vars<-res3[,1]
+         # 6. For loop over variables
+         for (var in vars){
+           #count<-count+1
+           # 7. Get data for the variable
+           query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
+                        pp.personName AS sampleID, pp.class1 AS class1, pp.class2 AS class2, pp.value AS value",sep="")
+           data<-cypher(graph,query)
+           
+           print("DEBUG ON")
+           print(square)
+           print(vt)
+           print(vst)
+           print(var)
+           print(head(data))
+           
+           print("DEBUG OFF")
+           
+           # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
+           c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
+           c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
+           needtosplit<-"no"
+           if (length(c1)==length(c2)){
+             if (sum(c1==c2)==length(c1)){
+               data<-data[which(data$class1==sort(unique(data$class1))[1]),]
+               print("debug1")
+               needtosplit<-"no"
+             }else{
+               data<-data
+               print("debug2")
+               needtosplit<-"yes"
+             }
+           }#end lengthcheck
+           
+           #changeindex<-which(c1!=c2)
+           # 9. Define variable class (numeric or character)
+           datavec<-as.numeric(data$value)
+           if (sum(is.na(datavec))==length(datavec)) {
+             data$value<-as.character(data$value)
+           }else{
+             data$value<-as.numeric(data$value)
+           }
+           # 10. if numeric
+           if (class(data$value)=="numeric" & needtosplit == "no"){
+             
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             
+             data$class2<-as.factor(data$class2)
+             alln<-nrow(data)
+             allmed<-median(data$value)
+             alliqr<-IQR(data$value)
+             
+             
+             sum<-data %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=dataS1))
+             
+             if(stats!="fail"&length(class2names)==2){
+               table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+             }else if(length(class2names)==1) {
+               table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
+             }
+             
+           }else if (class(data$value)=="numeric" & needtosplit == "yes"){
+             #split data in 2 
+             splitclasses<-sort(unique(data$class1))
+             
+             #PartA
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             dataS1<-data[which(data$class1==splitclasses[1]),]
+             
+             
+             dataS1$class2<-as.factor(dataS1$class2)
+             alln<-nrow(dataS1)
+             allmed<-median(dataS1$value)
+             alliqr<-IQR(dataS1$value)
+             
+             
+             sum<-dataS1 %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=dataS1))
+             if(stats!="fail"){
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+             }else{
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+             }
+             
+             
+             
+             
+             
+             #PartB
+             count<-count+1#remove NA
+             data<-data[which(!is.na(data$value)),]
+             dataS2<-data[which(data$class1==splitclasses[2]),]
+             
+             
+             dataS2$class2<-as.factor(dataS2$class2)
+             alln<-nrow(dataS2)
+             allmed<-median(dataS2$value)
+             alliqr<-IQR(dataS2$value)
+             
+             
+             sum<-dataS2 %>%
+               group_by(class2) %>% 
+               summarise(n=n(),median = median(value),IQR = IQR(value))
+             
+             class2names<-as.character(sum$class2)
+             
+             statname="kruskal wallis"
+             stats<-"fail"
+             
+             try(stats<-kruskal.test(value~class2,data=dataS2))
+             if(stats!="fail"){
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+             }else{
+               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+             }
+             
+             print("hey!")
+           }else if (class(data$value)=="character" & needtosplit == "no"){
+             
+             #remove NA
+             data<-data[which(data$value!=""),]
+             
+             if (nrow(data)>0){
+               data$class2<-as.factor(data$class2)
+               alln<-nrow(data)
+               data$value<-as.factor(data$value)
+               ft<-ftable(class2~value,data=data)
+               if(nrow(ft)>=2){
+                 ft[,1]<-ft[,1]/colSums(ft)[1]
+                 ft[,2]<-ft[,2]/colSums(ft)[2]
+                 statname="Chi-squared test"
+                 
+                 stats<-"fail"
+                 
+                 try(stats<-chisq.test(ft))
+                 
+                 ftdf<-as.data.frame((ft))
+                 class2names<-as.character(levels(ftdf$class2))
+                 ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
+                 ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
+                 
+                 grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
+                 grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
+                 
+                 count2<-count2+1
+                 if(stats!="fail"&length(class2names)==2){
+                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
+                 }else if(length(class2names)==1){
+                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
+                 }
+               }#endif
+               
+             }#endif
+             
+             
+           }else if (class(data$value)=="character" & needtosplit == "yes"){
+             print("need to split cat!")
+             
+           }else{NULL}
+           
+           
+           
+         }#end vars loop
+       }#end varsubtypes loop  
+     }#end vartypes loop
+     colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
+     colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
+     colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
+     colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
+     table1cat
+     
+   })
+   
+   output$tableNUM<-renderDataTable(tablefunNUM())
+   
+   output$tableNUM2<-renderTable({
+     thetab<-tablefunNUM()
+     xtable(thetab,digits=3)
+     },striped=TRUE,bordered=TRUE)
+   
+   output$tableCAT<-renderDataTable(tablefunCAT())
+   
+   output$tableCAT2<-renderTable({
+     thetab<-tablefunCAT()
+     xtable(thetab,digits=3)
+   },striped=TRUE,bordered=TRUE)
+   
    output$phenodatatable<-renderDataTable(phenoqueryfun())
    
    output$phenoPlotPrepare<-renderPlot({
@@ -1112,9 +1617,13 @@ server <- shinyServer(function(input, output) {
        )
        
        # Basic dot plot
+       # plotfig<-ggplot(data, aes(x=Categories, y=numeric, fill=Categories)) + 
+       #   geom_boxplot(fill='seashell')+
        plotfig<-ggplot(data, aes(x=Categories, y=numeric, fill=Categories)) + 
-         geom_boxplot(fill='seashell')+
-         geom_dotplot(binaxis='y', stackdir='center',stackratio=1.2,method='dotdensity') +
+         geom_boxplot(aes(alpha=0.3 )) +
+         scale_fill_manual(values=c("lightsteelblue", "mistyrose", "moccasin","lightgreen")) +
+         geom_dotplot(mapping=aes(x=Categories, y=numeric, color=Categories, fill = Categories),binaxis='y', stackdir='center',stackratio=1.2,method='dotdensity',inherit.aes = FALSE) +
+         scale_color_manual(values=c("darkblue", "darkred", "orange","darkgreen")) +
          #geom_jitter() +
          #stat_summary(fun.y=median, geom="point", shape=18, color="red") +
          theme_minimal() +
@@ -1583,6 +2092,8 @@ server <- shinyServer(function(input, output) {
      
      
      res<-signatureQuery()
+     print("original res")
+     print(head(res))
      
      if(whichSIGfun()!="all"){
        res<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
@@ -1595,6 +2106,8 @@ server <- shinyServer(function(input, output) {
        )
      }
      
+     print("original res after if ")
+     print(head(res))
      
      #res<-subset(res, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4 )
      
@@ -1621,6 +2134,13 @@ server <- shinyServer(function(input, output) {
      
      print("people")
      print(people)
+     
+     #temp debug fix
+     if(people$name[1]=="1"){
+       people$name<-as.character(eval(parse(text=paste("pData(",squareSIG2,")$sampleID",sep=""))))
+       
+     }
+     
      print(questions[[squareSIG2]]$pathway2[[1]])#debug
      edges=list(
        "edge1"=people[which(people$class2==questions[[squareSIG2]]$pathway2[[1]]),],
@@ -1657,18 +2177,29 @@ server <- shinyServer(function(input, output) {
      
      print("head(exprs(heatdata.all))")
      print(head(exprs(heatdata.all)))
-     print(pData(heatdata.all)[,"sample_name"])
      
-     colnames(heatdata.all)<-pData(heatdata.all)[,"sample_name"]
+     try(colnames(heatdata.all)<-pData(heatdata.all)[,"sampleID"])
+     
+     try(print(pData(heatdata.all)[,"sample_name"]))
+     
+     try(colnames(heatdata.all)<-pData(heatdata.all)[,"sample_name"])
      
      print(edges[[reacedgeSIG2]])
      
      print(edges[[reacedgeSIG2]]$name)
      print("before")
-     print("newsigvec")
-     sigvecTV<-sigvec%in%rownames(exprs(heatdata.all))
-     newsigvec<-sigvec[sigvecTV]
      
+     sigvecTV<-sigvec%in%rownames(exprs(heatdata.all))
+     print("sigvectv")
+     print(sigvecTV)
+     print("newsigvec")
+     print(length(sigvec))
+     print(length(sigvecTV))
+     newsigvec<-sigvec[sigvecTV]
+     print(newsigvec)
+     #print(rownames(exprs(heatdata.all)))
+     print(colnames(exprs(heatdata.all)))
+     print(edges[[reacedgeSIG2]]$name)
      heatdata<-exprs(heatdata.all)[newsigvec,edges[[reacedgeSIG2]]$name]
      
      
@@ -1776,7 +2307,8 @@ server <- shinyServer(function(input, output) {
    #igraphSP####
    output$igraphSP<-renderPlot({
      #get module
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #print("line1 inside reactive")
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("line2")
@@ -1807,7 +2339,8 @@ server <- shinyServer(function(input, output) {
    #d3graphSP####
    output$d3graphSP<-renderForceNetwork({
      #get module
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #print("line1 inside reactive")
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("line2")
@@ -1894,7 +2427,8 @@ server <- shinyServer(function(input, output) {
    #######begin radar
    output$radar<-renderPlot({
      #get module
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #print("line1 inside reactive")
      squarelist<-unlist(strsplit(setfun(),"_"))
      if(length(squarelist)==3){
@@ -2181,7 +2715,8 @@ server <- shinyServer(function(input, output) {
      #for each ME
      
      #get ME vector
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
      #print("data is read")
@@ -2278,7 +2813,8 @@ server <- shinyServer(function(input, output) {
    
    #modPheno####
    output$modPheno <- renderPlot({
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #print("line1 inside reactive")
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      
@@ -2396,7 +2932,8 @@ server <- shinyServer(function(input, output) {
    #subjectplot####
    output$subjectplot <- renderPlot({
      print("computing subjectplot")
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      #print("line1 inside reactive")
      data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      #print("line2")
@@ -2527,7 +3064,8 @@ server <- shinyServer(function(input, output) {
    
    #module2d####
    output$module2d<-renderPlot({
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      datarec1<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/modules_as_classifiers_AUC_glm.csv",sep=""))
      squarelist<-unlist(strsplit(setfun(),"_"))
      if(length(squarelist)==3){
@@ -2636,7 +3174,8 @@ server <- shinyServer(function(input, output) {
    
    output$moduleHM<-renderPlot({
      #get modules and diffME for square
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      datarec1<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/modules_as_classifiers_AUC_glm.csv",sep=""))
      squarelist<-unlist(strsplit(setfun(),"_"))
      if(length(squarelist)==3){
@@ -2683,7 +3222,8 @@ server <- shinyServer(function(input, output) {
    
    output$sigenrichHM<-renderPlot({
      #get modules and diffME for square
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      datarec1<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/modules_as_classifiers_AUC_glm.csv",sep=""))
      squarelist<-unlist(strsplit(setfun(),"_"))
      if(length(squarelist)==3){
@@ -2741,7 +3281,8 @@ server <- shinyServer(function(input, output) {
      }else{square<-paste(squarelist[c(3,4)],collapse="_")}
      print("square")
      print(square)
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun2(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      data<-read.csv(paste(prefix,setfun2(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
      print("data is read")
@@ -2790,7 +3331,8 @@ server <- shinyServer(function(input, output) {
      }else{square<-paste(squarelist[c(3,4)],collapse="_")}
      print("square")
      print(square)
-     prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     #prefix<-paste("~/output/build/",buildfun(),"/",sep="")
+     prefix<-"~/output/build/"
      data0<-read.csv(paste(prefix,setfun2(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
      data<-read.csv(paste(prefix,setfun2(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
      print("data is read 2")
@@ -3162,7 +3704,8 @@ server <- shinyServer(function(input, output) {
    
    #cellmatrix####
    plotInputGigamat1 <- reactive({
-     cellcordir<-file.path("~/output/build",buildfun(),"12_CELLCOR/figures")
+     #cellcordir<-file.path("~/output/build",buildfun(),"12_CELLCOR/figures")
+     cellcordir<-file.path("~/output/build/CELLCOR/figures")
      print(cellcordir)
      load(file.path(cellcordir,"csl.RData"))
      #"~/output/build//version_2017-03-25_20_17_30//12_CELLCOR/figures/csl.RData"
@@ -3242,7 +3785,8 @@ server <- shinyServer(function(input, output) {
    
    plotInputGigbar <- reactive({
      ##CODE
-     cellcordir<-file.path("~/output/build/",buildfun(),"/12_CELLCOR/figures")
+     #cellcordir<-file.path("~/output/build/",buildfun(),"/12_CELLCOR/figures")
+     cellcordir<-file.path("~/output/build/CELLCOR/figures")
      load(file.path(cellcordir,"csl.RData"))
      reacstudy<-as.numeric(usestudy())
      reacset<-as.numeric(useset())#[reacstudy]
@@ -3729,7 +4273,8 @@ server <- shinyServer(function(input, output) {
   #Virtual Cells####
    plotInputGigamat2 <- reactive({
      print("debugG2_1")
-     cellcordir<-file.path("~/output/build/",buildfun(),"/12_CELLCOR/figures")
+     #cellcordir<-file.path("~/output/build/12_CELLCOR/figures")
+     cellcordir<-file.path("~/output/build/CELLCOR/figures")
      print(cellcordir)
      load(file.path(cellcordir,"csl.RData"))
      ##CODE

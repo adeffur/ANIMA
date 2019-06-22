@@ -26,7 +26,8 @@
   #Output folders
   ds<-gsub(":","_",gsub(" ","_",Sys.time(),fixed=TRUE),fixed=TRUE)
   #versioned output
-  dir.output.version<-file.path(dir.main,paste("build/version_",ds,sep=""))
+  #dir.output.version<-file.path(dir.main,paste("build/version_",ds,sep=""))
+  dir.output.version<-file.path(dir.main,"build")
   rsc="none"
   for (dir in c(dir.main,dir.output.version)) {
     if (!file.exists(dir)) {
@@ -2272,7 +2273,9 @@ bwnet = blockwiseModules(datExpr, maxBlockSize = 44000,#edited
                        reassignThreshold = 0, mergeCutHeight = 0.25,
                        numericLabels = FALSE,#was true, but I need colours, so false
                        saveTOMs = TRUE,
+                       #saveTOMs = FALSE,
                        saveTOMFileBase = file.path(dir.results,"TOM_blockwise"),#change filename based on no probes
+                       
                        verbose = 3)
 
 bwmoduleColors = bwnet$colors#this is only kept for q.i=1 and i=1, all subsequent ones are relabeled to match these
@@ -2313,6 +2316,7 @@ if(length(bwnet$MEs)<10){
                            reassignThreshold = 0, mergeCutHeight = 0.25,
                            numericLabels = FALSE,#was true, but I need colours, so false
                            saveTOMs = TRUE,
+                           #saveTOMs = FALSE,
                            saveTOMFileBase = file.path(dir.results,"TOM_blockwise"),#change filename based on no probes
                            verbose = 3)
   
@@ -2352,6 +2356,7 @@ if(length(bwnet$MEs)<10){
                            reassignThreshold = 0, mergeCutHeight = 0.25,
                            numericLabels = FALSE,#was true, but I need colours, so false
                            saveTOMs = TRUE,
+                           #saveTOMs = FALSE,
                            saveTOMFileBase = file.path(dir.results,"TOM_blockwise"),#change filename based on no probes
                            verbose = 3)
   
@@ -2530,6 +2535,11 @@ dim(textMatrix) = dim(moduleTraitCor)
 
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_pheno_correlation.pdf',sep=""),height=nrow(moduleTraitCor)/2,width=ncol(moduleTraitCor)*0.75) 
 par(mar = c(8,10,2,3));par(mfrow=c(1,1))
+cextext<-0.9
+if (length(names(datTraits))<7){
+  par(mar = c(6,5,2,2));par(mfrow=c(1,1))
+  cextext<-0.5
+}
 # Display the correlation values within a heatmap plot
 labeledHeatmap(Matrix = moduleTraitCor[den,],
              xLabels = names(datTraits),
@@ -2539,7 +2549,7 @@ labeledHeatmap(Matrix = moduleTraitCor[den,],
              colors = blueWhiteRed(50),
              textMatrix = textMatrix[den,],
              setStdMargins = FALSE,
-             cex.text = 0.9,
+             cex.text = cextext,
              zlim = c(-1,1),
              main = paste("Module-pheno correlation"))
 par(parbackup)
@@ -3461,16 +3471,18 @@ write.table(as.data.frame(allLLIDs), file = fileName,row.names = FALSE, col.name
 
 # do this for eachj block, i.e.TOM?
 
-##don't do TOM plots at this stage
-load(file.path(dir.results,"TOM_blockwise-block.1.RData"))
-TOM<-as.matrix(TOM)
-dissTOM1=1-TOM
-# Transform dissTOM with a power to make moderately strong connections more visible in the heatmap
-plotTOM1 = dissTOM1^7;
-# Set diagonal to NA for a nicer plot
-diag(plotTOM1) = NA;
-# Call the plot function
-#sizeGrWindow(9,9)
+#NEW: commented out
+
+# ##don't do TOM plots at this stage
+# load(file.path(dir.results,"TOM_blockwise-block.1.RData"))
+# TOM<-as.matrix(TOM)
+# dissTOM1=1-TOM
+# # Transform dissTOM with a power to make moderately strong connections more visible in the heatmap
+# plotTOM1 = dissTOM1^7;
+# # Set diagonal to NA for a nicer plot
+# diag(plotTOM1) = NA;
+# # Call the plot function
+# #sizeGrWindow(9,9)
 
 # # #-- can't plot whole tom due to memory constraints...need to set ulimit -s 64. issues with C stack usage
 # 
@@ -3537,7 +3549,7 @@ figure<-figure+1
 par(parbackup)
 #19. Export to Cytoscape####
 
-# Load topological overlap 
+# # Load topological overlap 
 load(file.path(dir.results,"TOM_blockwise-block.1.RData"))
 TOM<-as.matrix(TOM)
 
@@ -3561,8 +3573,10 @@ dimnames(modTOM) = list(modProbes, modProbes)
 
 # Export the network into edge and node list files Cytoscape can read
 moduleNetwork<-exportNetworkToCytoscape(modTOM,
-                             edgeFile = paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-edges-", paste(bwmoduleColors[bwnet$blockGenes[[1]][inModule]][1], collapse="-"), ".txt", sep=""),
-                             nodeFile = paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-nodes-", paste(bwmoduleColors[bwnet$blockGenes[[1]][inModule]][1], collapse="-"), ".txt", sep=""),
+                             #edgeFile = paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-edges-", paste(bwmoduleColors[bwnet$blockGenes[[1]][inModule]][1], collapse="-"), ".txt", sep=""),
+                             #nodeFile = paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-nodes-", paste(bwmoduleColors[bwnet$blockGenes[[1]][inModule]][1], collapse="-"), ".txt", sep=""),
+                             edgeFile = NULL,
+                             nodeFile=NULL,
                              weighted = TRUE,
                              threshold = 0.0005,#??????????????????thisis where edges are lost
                              nodeNames = modProbes,
@@ -4100,49 +4114,49 @@ for (cellgene in cellgenes2){
 cellprobelist[[cellkinds[cellkind]]]<-cellprobevec
 }
 
-#make small_mod_networks for all modules and annotate them# does not work well as it removes key genes...
-modulesNotGrey<-modules[modules!="grey"]
-for (module in 1:length(modulesNotGrey)){
-colour<-modulesNotGrey[module]
-modnet<-read.table(file.path(dir.results,paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-edges-", colour, ".txt", sep="")),header=TRUE)
-smallmodnet<-modnet[modnet$weight>2*median(as.numeric(modnet$weight)),]#network edge filter
-smallmodnetprobes<-unique(as.character(smallmodnet[,1]))
-write.table(smallmodnet,file.path(dir.results,paste("smallNet_",colour,".txt",sep="")),row.names=F)
-smallmodgenes<-as.character(unique(smallmodnet$fromAltName))
-write.table(smallmodgenes,file.path(dir.results,paste("smallNet_",colour,"_genes.txt")),row.names=F)
-probedic<-unique(smallmodnet[,c(1,5)])
-
-#map genes to Reactome pathways
-modnetdata<-modreacdf[modreacdf$module==modulesNotGrey[module],]#some modules are not enriched for reactome pw
-if(nrow(modnetdata)>1){
-frame<-c("pathway","probe")
-for (rowx in 1:nrow(modnetdata)){
-  components<-list(modnetdata[rowx,"Description"],unlist(strsplit(modnetdata[rowx,"geneID"],"/")))
-  for (genex in components[[2]]){
-    pwprobes0<-as.character(probedic[as.character(probedic$fromAltName)==genex,1])
-    pwprobes<-pwprobes0[!is.na(pwprobes0)]
-    if(length(pwprobes)>0){
-    for (probex in 1:length(pwprobes)){
-      frame<-rbind(frame,c(components[[1]],pwprobes[probex]))
-      }
-    }
-  }
-}
-
-if(class(frame)!="character"){#for the singular case of zero entries into frame...
-  if(nrow(frame)>1){#for the singular case of one pathway and one probe...
-frame2<-data.frame(frame[1:nrow(frame),])
-frame3<-frame2[2:nrow(frame2),]
-colnames(frame3)<-frame[1,]
-write.csv(frame3,file.path(dir.results,paste("smallNet_",colour,"_pw_probes.txt")),row.names=F)
-}
-}
-}
-
-}#end small_mod_net creation and annotation
+# #make small_mod_networks for all modules and annotate them# does not work well as it removes key genes...
+# modulesNotGrey<-modules[modules!="grey"]
+# for (module in 1:length(modulesNotGrey)){
+# colour<-modulesNotGrey[module]
+# modnet<-read.table(file.path(dir.results,paste('CS',q.i,'.',an.count,'.',i,'.',names(datalist)[[i]],"CS-edges-", colour, ".txt", sep="")),header=TRUE)
+# smallmodnet<-modnet[modnet$weight>2*median(as.numeric(modnet$weight)),]#network edge filter
+# smallmodnetprobes<-unique(as.character(smallmodnet[,1]))
+# write.table(smallmodnet,file.path(dir.results,paste("smallNet_",colour,".txt",sep="")),row.names=F)
+# smallmodgenes<-as.character(unique(smallmodnet$fromAltName))
+# write.table(smallmodgenes,file.path(dir.results,paste("smallNet_",colour,"_genes.txt")),row.names=F)
+# probedic<-unique(smallmodnet[,c(1,5)])
+# 
+# #map genes to Reactome pathways
+# modnetdata<-modreacdf[modreacdf$module==modulesNotGrey[module],]#some modules are not enriched for reactome pw
+# if(nrow(modnetdata)>1){
+# frame<-c("pathway","probe")
+# for (rowx in 1:nrow(modnetdata)){
+#   components<-list(modnetdata[rowx,"Description"],unlist(strsplit(modnetdata[rowx,"geneID"],"/")))
+#   for (genex in components[[2]]){
+#     pwprobes0<-as.character(probedic[as.character(probedic$fromAltName)==genex,1])
+#     pwprobes<-pwprobes0[!is.na(pwprobes0)]
+#     if(length(pwprobes)>0){
+#     for (probex in 1:length(pwprobes)){
+#       frame<-rbind(frame,c(components[[1]],pwprobes[probex]))
+#       }
+#     }
+#   }
+# }
+# 
+# if(class(frame)!="character"){#for the singular case of zero entries into frame...
+#   if(nrow(frame)>1){#for the singular case of one pathway and one probe...
+# frame2<-data.frame(frame[1:nrow(frame),])
+# frame3<-frame2[2:nrow(frame2),]
+# colnames(frame3)<-frame[1,]
+# write.csv(frame3,file.path(dir.results,paste("smallNet_",colour,"_pw_probes.txt")),row.names=F)
+# }
+# }
+# }
+# 
+# }#end small_mod_net creation and annotation
 
 #clean up
-rm(TOM)
+#rm(TOM)
 collectGarbage()
 
 #6_Pathway analysis*****************************************####
@@ -8505,7 +8519,29 @@ query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
               MATCH (c2:cellprop {name:csvLine.cellprop}) MERGE (cell:CELL {name:csvLine.cell}) CREATE (c2)-[:mapsTo]->(cell)",sep="")
 cypher(graph,query)
 
+query<-'MATCH (a:personPheno),(b:pheno) WHERE a.name = b.name AND a.square = b.square CREATE (a)-[r:is]->(b) RETURN type(r)'
+cypher(graph,query)
 ##end new
+
+#new
+graphdata<-read.csv(file.path(dir.data_root,"variable_types.csv"),stringsAsFactors = FALSE)
+#graphdata<-read.csv("~/source_data/variable_types.csv",stringsAsFactors = FALSE)
+
+colnames(graphdata)<-c("study","personPheno","vartype","varsubtype")
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+#edit this
+graphdata<-graphdata[which(graphdata$study!="IMPI"),2:4]
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+              MATCH (p:personPheno {name:csvLine.personPheno}) MERGE (vst:varsubtype {name:csvLine.varsubtype})
+              CREATE (p)-[:mapsTo]->(vst)
+              MERGE (vt:vartype {name:csvLine.vartype})
+              MERGE (vst)-[:mapsTo]->(vt)",sep="")
+cypher(graph,query)
+
+
+
 
 #END NEO4J
 }

@@ -228,6 +228,10 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
         }
         if(!is.null(cellscore)&!is.na(cellscore)&!is.nan(cellscore)){
           cellscorelist[[cellC]]<-cellscore
+          # print("start print debug")
+          # print(cellC)
+          # print(cellscore)
+          # print("end print debug")
         }#check NA, NaN, NULL
       }#end if length nuID check
     }#end nuid length check
