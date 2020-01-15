@@ -549,7 +549,8 @@ ui<-fluidPage(
                     column(3,sliderInput("vertexsize1","vertex size",2,30,15,0.1))
                   ),
                   fluidRow(
-                    column(4,sliderInput("plotheightMeta","plotheightMeta",500,1500,700,150))
+                    column(4,sliderInput("plotheightMeta","plotheightMeta",500,1500,700,150)),
+                    column(4,sliderInput("moduleThresh","moduleThresh",-0.05,1,-0.05,0.05))
                   ),
                   
                   h3(paste('CellMatrix:',project),style="color:#FF0000"),
@@ -600,6 +601,7 @@ ui<-fluidPage(
                     tabPanel("Gene",
                              #tabsetPanel("BXP",
                              tabsetPanel(             
+                                         tabPanel("selected genes",tableOutput("genelist")),
                                          tabPanel("boxplot",plotOutput("boxplot")),
                                          tabPanel("detableBXP",DT::dataTableOutput('detableBXP'))
                              )
@@ -770,6 +772,7 @@ server <- shinyServer(function(input, output) {
    useallsame<-reactive({input$allsame})
    usediff<-reactive({input$different})
    plotheightM<-reactive({input$plotheightMeta})
+   threshfun<-reactive({input$moduleThresh})
    
    #igraph_plotter controls single module and bipartite
    layoutfun<-reactive({input$layout})
@@ -1792,7 +1795,17 @@ server <- shinyServer(function(input, output) {
    output$phenoPlot <- renderUI({
      plotOutput("phenoPlotPrepare", height = phenoplotheightfun())
    })
-
+   
+   observe({output$genelist<-renderTable({
+      regexgl<-useregex()
+      print(regexgl)
+      genelistquery<-paste("MATCH (s:SYMBOL) WHERE s.name=~ '",regexgl,"' RETURN s.name as gene",sep="")
+      genelist<-cypher(graph,genelistquery)
+      genelist<-genelist[order(genelist),]
+      print(genelist)
+      genelist},priority=100)
+   })
+   
    #Gene####
    observe({output$boxplot<-renderPlot({
      ##CODE
@@ -1814,6 +1827,10 @@ server <- shinyServer(function(input, output) {
      dequery<-paste("MATCH (p:PROBE {square:'",square,"'})-[r]-(s:SYMBOL) WHERE s.name=~ '",regex,"' RETURN p.square as square,p.edge as edge, p.name as probe, s.name as gene, p.aveEXPR as expression, p.logfc as logfc, p.adjPVAL as qvalue",sep="")
      detable<-cypher(graph,dequery)
      print(detable)
+     # genelistquery<-paste("MATCH (s:SYMBOL) WHERE s.name=~ '",regex,"' RETURN s.name as gene",sep="")
+     # genelist<-cypher(graph,genelistquery)
+     # print(genelist)
+     # output$genelist<-renderTable(genelist)
      print(returncsvfun2())
      output$detableBXP<-DT::renderDataTable(detable,server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15)) 
      observe({if(returncsvfun2()){
@@ -1822,7 +1839,7 @@ server <- shinyServer(function(input, output) {
      })#end observe
    }, height = as.numeric(input$plotheight))
    
-   })
+   },priority=80)
    
    #Inflammasomes####
    plotInputMachines<-reactive({
@@ -4101,6 +4118,9 @@ server <- shinyServer(function(input, output) {
      #optional allsame code
      print("debug A")
      allmat3<-allmat2[,chosenSubset]
+     
+     allmat3<-allmat3[,which(apply(allmat3,2,function(x){min(abs(x))>threshfun()}))]
+     
      print("debug B")
      allmat3.allup<-apply(allmat3,2,function(x){sum(x>0)==length(x)})
      #print("allmat3.allup")
