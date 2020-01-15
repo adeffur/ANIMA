@@ -17,7 +17,7 @@
 #Setup####
 
   #Current date string used for versioning output
-  source("scripts/ANIMA_setup.R")
+  source("~/scripts/ANIMA_setup.R")
   par("xpd"=FALSE)
   #WGCNA multithreading (optional)
   enableWGCNAThreads()
@@ -442,7 +442,9 @@ figure<-1
     
     #categorical
     pd3cat<-pd2[,pdm2[dataset.variables[[i]],]==1&varclass=="c"]
-    
+    #remove all na columns
+    pd3cat<-pd3cat[,!(apply(pd3cat,2,function(x){all(is.na(x))}))]
+  
     if(!is.null(pd2$sample_name)){
     rownames(pd3cat)<-pd2$sample_name
     }else{
@@ -458,22 +460,24 @@ figure<-1
     }
     pd3num[,contrast.variable[[1]]]<-as.factor(classifier1)
     pd3num[,contrast.variable[[2]]]<-as.factor(classifier2)
+    #remove all na columns
+    pd3num<-pd3num[,!(apply(pd3num,2,function(x){all(is.na(x))}))]
 
  plistcat<-list()
  for (colu in 1:ncol(pd3cat)){
 
   print(paste("The results for:",names(pd3cat)[colu],"   ***********************************"))
   
-  theTable_c1<-ftable(xtabs(
+  theTableC1<-ftable(xtabs(
     eval(parse(text=paste("~",contrast.variable[[1]],"+",names(pd3cat)[colu],sep="")))
-    ,data=pd3cat[complete.cases(pd3cat),]))
-  print(theTable_c1)
+    ,data=pd3cat[complete.cases(pd3cat[,colu]),]))
+  print(theTableC1)
   
   
-  theTable_c12<-as.data.frame(theTable_c1)
-  write.csv(theTable_c12,file=file.path(dir.results,paste("counts_",contrast.variable1,names(pd3cat)[colu],".csv",sep="")))
-  if (nrow(theTable_c12)>1){
-  testres_c1<-chisq.test(theTable_c1)
+  theTableC12<-as.data.frame(theTableC1)
+  write.csv(theTableC12,file=file.path(dir.results,paste("counts_",contrast.variable1,names(pd3cat)[colu],".csv",sep="")))
+  if (nrow(theTableC12)>1){
+  testres_c1<-chisq.test(theTableC1)
   print(testres_c1)
   testres_c1_df<-data.frame(cbind(names(testres_c1),as.character(unlist(lapply(testres_c1, paste, collapse=" ")))))
   write.csv(testres_c1_df,file=file.path(dir.results,paste("testres_c1_colu",colu,contrast.variable1,names(pd3cat)[colu],".csv",sep="")))
@@ -481,7 +485,7 @@ figure<-1
   
   theTable_c2<-ftable(xtabs(
     eval(parse(text=paste("~",contrast.variable[[2]],"+",names(pd3cat)[colu],sep="")))
-    ,data=pd3cat[complete.cases(pd3cat),]))
+    ,data=pd3cat[complete.cases(pd3cat[,colu]),]))
   print(theTable_c2)
  
   
@@ -494,7 +498,7 @@ figure<-1
     write.csv(testres_c2_df,file=file.path(dir.results,paste("testres_c2_coul_",colu,contrast.variable1,names(pd3cat)[colu],".csv",sep="")))
   }
   plistcat[[colu]]<-NULL
-  if (nrow(theTable_c12)>1&nrow(theTable_c22)>1){
+  if (nrow(theTableC12)>1&nrow(theTable_c22)>1){
  plistcat[[colu]]<-ggplot(data=pd3cat,aes_string(x=names(pd3cat)[colu],fill=names(pd3cat)[colu]))+geom_bar(aes(y = (..count..)/sum(..count..)))+facet_grid(eval(parse(text=paste(contrast.variable[[1]],"~",contrast.variable[[2]],sep=""))))+theme_bw()+theme(axis.text.x = element_text(angle = 45, hjust = 1))+scale_x_discrete(name=paste("Proportion by",contrast.variable2,"\nP=",format(testres_c2$p.value,digits=3)))+scale_y_continuous(name=paste("Proportion by",contrast.variable1,"\nP=",format(testres_c1$p.value,digits=3)))+ggtitle(names(pd3cat)[[colu]])
   }#endif
   }
@@ -1767,7 +1771,8 @@ figure<-figure+1
 ##
 #eigencell (embryonic code; the idea is generate the 1st PC of the cell-prop matrix)
 cellmat1<-decmat.red
-eigencell<-WGCNA::moduleEigengenes(t(decmat.red),rep("cellME",nrow(decmat.red)))
+colnames(cellmat1)<-colnames(dtd)
+eigencell<-WGCNA::moduleEigengenes(t(cellmat1),rep("cellME",nrow(decmat.red)))
 
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_eigencell.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1.2)
 par(mfrow=c(2,1), mar=c(0.3, 5.8, 10, 2.7))
@@ -2146,7 +2151,10 @@ datTraits<-cbind(data.frame(catnum),num)
   }else{rownames(datTraits)<-pd2$sampleID} 
 
 collectGarbage();
+
 datTraits <- datTraits[,colSums(is.na(datTraits))<nrow(datTraits)]#this removes all columns where all values are NA
+datTraits <- datTraits[,nrow(datTraits)-colSums(is.na(datTraits))>2]#this removes all columns with less than two observations
+
 uniquelength <- apply(datTraits,2,function(x) length(unique(x[!is.na(x)])))
 
 datTraits <- subset(datTraits, select=uniquelength>1)#this removes all columns where all values are the same after removing NAs
@@ -2186,14 +2194,14 @@ write.csv(datTraits2,file=file.path(dir.results,"WGCNA_TRAIT_DATA_REDUCED.csv"))
 #expression data and phenotype data are now in analagous data frames
 
 #correlation matrix of traits
-pheatmap(cor(as.matrix(datTraits),use='pairwise.complete.obs'),filename=paste('fig_',q.i,'.',an.count,'.',figure,'_Correlation of phenotype variables.pdf',sep=""),height=8,width=8)
+pheatmap(cor(as.matrix(datTraits),use='pairwise.complete.obs'),filename=paste('fig_',q.i,'.',an.count,'.',figure,'_Correlation of phenotype variables.pdf',sep=""),height=10,width=10)
 figure<-figure+1
 #todo:send to neo4j after making edgewise
 
 #correlation matrix of traits with cellprop
 cellprops<-t(decmat.red)
 names(cellprops)<-rownames(decmat.red)
-pheatmap(cor(as.matrix(datTraits),cellprops,use='pairwise.complete.obs'),filename=paste('fig_',q.i,'.',an.count,'.',figure,'_Correlation of phenotype variables_with cellprop.pdf',sep=""),height=8,width=8)
+pheatmap(cor(as.matrix(datTraits),cellprops,use='pairwise.complete.obs'),filename=paste('fig_',q.i,'.',an.count,'.',figure,'_Correlation of phenotype variables_with cellprop.pdf',sep=""),height=10,width=10)
 figure<-figure+1
 #todo:send to neo4j after making edgewise
 #5. Visualisation of how the traits relate to the sample dendrogram####
@@ -2645,7 +2653,7 @@ pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_correlation.pdf',sep=
 par(mar = c(6,10,3,2));par(mfrow=c(1,1))
 # Display the correlation values within a heatmap plot
 labeledHeatmap(Matrix = moduleCellCor[den,],
-             xLabels = names(cellprops),
+             xLabels = colnames(cellprops),
              yLabels = names(MEs)[den],
              ySymbols = names(MEs)[den],
              colorLabels = FALSE,
@@ -2933,7 +2941,7 @@ pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_subset_correlation.pd
 par(mar = c(6,10,3,2));par(mfrow=c(1,1))
 # Display the correlation values within a heatmap plot
 labeledHeatmap(Matrix = moduleCellCor[den,],
-             xLabels = names(cellprops),
+             xLabels = colnames(cellprops),
              yLabels = names(MEs)[den],
              ySymbols = names(MEs)[den],
              colorLabels = FALSE,
@@ -8531,8 +8539,12 @@ colnames(graphdata)<-c("study","personPheno","vartype","varsubtype")
 write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
 #edit this
-graphdata<-graphdata[which(graphdata$study!="IMPI"),2:4]
+graphdata<-graphdata[which(graphdata$study%in%names(studies)),2:4]
+
+
 write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+#write.csv(graphdata,file.path("tmp.csv"))
+
 query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (p:personPheno {name:csvLine.personPheno}) MERGE (vst:varsubtype {name:csvLine.varsubtype})
               CREATE (p)-[:mapsTo]->(vst)

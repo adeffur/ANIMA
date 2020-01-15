@@ -313,6 +313,9 @@ cellnamelist3<-cypher(graph,query)
 cellnames3<-cellnamelist3$cellname3
 
 print("cellcore3 ok")
+
+#load all module data
+load("~/output/build/allmodules.RData")
   
 # Define UI 
 ui<-fluidPage(
@@ -328,7 +331,9 @@ ui<-fluidPage(
                              h3(paste('Phenotype:',project),style="color:#FF0000"),
                              fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33)),
                              fluidRow(column(4,uiOutput("choosePheno"),offset=.33)),
-                             fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33))
+                             fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33),column(3,downloadButton("tablenumcsv", "TableNUM")
+),column(3,downloadButton("tablecatcsv", "TableCAT")
+))
                     ),
                     tabPanel("Gene",
                       tags$head(tags$style("#boxplot{height:100vh !important; overflow-y: scroll}")),
@@ -355,6 +360,7 @@ ui<-fluidPage(
                     ),
                     tabPanel("Signatures",
                              tags$head(tags$style("#signatures{height:90vh !important;}")),
+                             tags$head(tags$style("#moduleSankey{height:85vh !important;}")),
                              h3(paste('Signatures:',project),style="color:#FF0000"),
                              fluidRow(
                                #column(4,uiOutput("choosesquareSIG"),offset=.33),
@@ -376,12 +382,15 @@ ui<-fluidPage(
                                column(2,selectInput("scale","scale",c("none","row","column")))
                              ),
                              fluidRow(
-                               column(5,sliderInput("volcanoFC","Log2 fold change: upper bound",-5,5,0,step=0.05),offset=.33),
+                                column(5,sliderInput("volcanoSIGlow","significance: lower bound",0,30,0,step=.5)),
                                column(5,sliderInput("volcanoSIG","significance: upper bound",0,30,0,step=.5))
                              ),
                              fluidRow(
                                column(5,sliderInput("volcanoFClow","Log2 fold change: lower bound",-5,5,0,step=0.05),offset=.33),
-                               column(5,sliderInput("volcanoSIGlow","significance: lower bound",0,30,0,step=.5))
+                               column(5,sliderInput("volcanoFC","Log2 fold change: upper bound",-5,5,0,step=0.05),offset=.33)
+                               
+                             ),fluidRow(
+                                column(5,selectInput("vpcol","choose colour scheme",c("logfc","module"),selected="module",multiple=FALSE))
                              )
                              ),
                     #INTERFACE ELEMENTS: Tabs
@@ -612,7 +621,8 @@ ui<-fluidPage(
                                           tabPanel("cnetplot",plotOutput("cnetplot1")),
                                           tabPanel("GSEA table",DT::dataTableOutput("gseaTable2")),
                                           tabPanel("GSEA emapplot",plotOutput("emapplot2")),
-                                          tabPanel("gseaplot",plotOutput("gseaplot2"))
+                                          tabPanel("gseaplot",plotOutput("gseaplot2")),
+                                          tabPanel("ModuleMaps",sankeyNetworkOutput("moduleSankey"))
                                          )
 
 
@@ -735,6 +745,7 @@ server <- shinyServer(function(input, output) {
    
    whichSIGfun<-reactive({input$whichsig})
    scaleSIGfun<-reactive({input$scale})
+   vpplotfun<-reactive({input$vpcol})
    #Pheno
    squarephenofun<-reactive({input$PhenoSquare})
    phenofun2<-reactive({input$phenochoice})
@@ -1106,444 +1117,487 @@ server <- shinyServer(function(input, output) {
    
    
    tablefunNUM<-reactive({
-     square<-squarephenofun()
-     table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
-                           "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
-     
-     table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
-     
-     count<-0
-     count2<-0
-     # 1. Get vartypes for square
-     query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
-     res<-cypher(graph,query)
-     vartypes<-res[,1]
-     
-     # 2. For loop over vartypes
-     for (vt in vartypes){
-       # 3. Get varsubtypes for vartype
-       
-       query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
-       res2<-cypher(graph,query)
-       varsubtypes<-res2[,1]
-       
-       # 4. For loop over varsubtypes
-       for (vst in varsubtypes){
-         # 5. Get variables for varsubtype
-         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
-         res3<-cypher(graph,query)
-         vars<-res3[,1]
-         # 6. For loop over variables
-         for (var in vars){
-           #count<-count+1
-           # 7. Get data for the variable
-           query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
+      square<-squarephenofun()
+      table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
+                            "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
+      
+      table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
+      
+      count<-0
+      count2<-0
+      # 1. Get vartypes for square
+      query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
+      res<-cypher(graph,query)
+      vartypes<-res[,1]
+      
+      # 2. For loop over vartypes
+      for (vt in vartypes){
+         # 3. Get varsubtypes for vartype
+         
+         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
+         res2<-cypher(graph,query)
+         varsubtypes<-res2[,1]
+         
+         # 4. For loop over varsubtypes
+         for (vst in varsubtypes){
+            # 5. Get variables for varsubtype
+            query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
+            res3<-cypher(graph,query)
+            vars<-res3[,1]
+            print("vars")
+            print(vars)
+            # 6. For loop over variables
+            for (var in vars){
+               #count<-count+1
+               # 7. Get data for the variable
+               query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
                         pp.personName AS sampleID, pp.class1 AS class1, pp.class2 AS class2, pp.value AS value",sep="")
-           data<-cypher(graph,query)
-           
-           print("DEBUG ON")
-           print(square)
-           print(vt)
-           print(vst)
-           print(var)
-           print(head(data))
-           
-           print("DEBUG OFF")
-           
-           # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
-           c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
-           c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
-           needtosplit<-"no"
-           if (length(c1)==length(c2)){
-           if (sum(c1==c2)==length(c1)){
-             data<-data[which(data$class1==sort(unique(data$class1))[1]),]
-             print("debug1")
-             needtosplit<-"no"
-           }else{
-             data<-data
-             print("debug2")
-             needtosplit<-"yes"
-           }
-           }#end lengthcheck
-           
-           #changeindex<-which(c1!=c2)
-           # 9. Define variable class (numeric or character)
-           datavec<-as.numeric(data$value)
-           if (sum(is.na(datavec))==length(datavec)) {
-             data$value<-as.character(data$value)
-           }else{
-             data$value<-as.numeric(data$value)
-           }
-           # 10. if numeric
-           if (class(data$value)=="numeric" & needtosplit == "no"){
-             
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             
-             data$class2<-as.factor(data$class2)
-             alln<-nrow(data)
-             allmed<-median(data$value)
-             alliqr<-IQR(data$value)
-             
-             
-             sum<-data %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=data))
-             
-             if(stats!="fail"&length(class2names)==2){
-                  table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-                    }else if(length(class2names)==1) {
-                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
-             }
-             
-           }else if (class(data$value)=="numeric" & needtosplit == "yes"){
-             #split data in 2 
-             splitclasses<-sort(unique(data$class1))
-             
-             #PartA
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             dataS1<-data[which(data$class1==splitclasses[1]),]
-             
-             
-             dataS1$class2<-as.factor(dataS1$class2)
-             alln<-nrow(dataS1)
-             allmed<-median(dataS1$value)
-             alliqr<-IQR(dataS1$value)
-             
-             
-             sum<-dataS1 %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=dataS1))
-             if(stats!="fail"){
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-             }else{
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
-             }
-             
-             
-             
-             
-             
-             #PartB
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             dataS2<-data[which(data$class1==splitclasses[2]),]
-             
-             
-             dataS2$class2<-as.factor(dataS2$class2)
-             alln<-nrow(dataS2)
-             allmed<-median(dataS2$value)
-             alliqr<-IQR(dataS2$value)
-             
-             
-             sum<-dataS2 %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=dataS2))
-             if(stats!="fail"){
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-             }else{
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
-             }
-             
-             print("hey!")
-           }else if (class(data$value)=="character" & needtosplit == "no"){
-             
-             #remove NA
-             data<-data[which(data$value!=""),]
-             
-             if (nrow(data)>0){
-               data$class2<-as.factor(data$class2)
-               alln<-nrow(data)
-               data$value<-as.factor(data$value)
-               ft<-ftable(class2~value,data=data)
-               if(nrow(ft)>=2){
-                 ft[,1]<-ft[,1]/colSums(ft)[1]
-                 ft[,2]<-ft[,2]/colSums(ft)[2]
-                 statname="Chi-squared test"
-                 
-                 stats<-"fail"
-                 
-                 try(stats<-chisq.test(ft))
-                 
-                 ftdf<-as.data.frame((ft))
-                 class2names<-as.character(levels(ftdf$class2))
-                 ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
-                 ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
-                
-                 #grp1<-paste(paste(ftdf1$value,ftdf1$Freq,sep=":"),collapse="__")
-                 #grp2<-paste(paste(ftdf2$value,ftdf2$Freq,sep=":"),collapse="__")
-                 
-                 grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
-                 grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
-                 
-                 count2<-count2+1
-                 if(stats!="fail"&length(class2names)==2){
-                 table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
-                 }else if(length(class2names)==1){
-                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
-                 }
-               }#endif
+               data<-cypher(graph,query)
                
-             }#endif
-             
-             
-           }else if (class(data$value)=="character" & needtosplit == "yes"){
-             print("need to split cat!")
-             
-           }else{NULL}
-           
-           
-           
-         }#end vars loop
-       }#end varsubtypes loop  
-     }#end vartypes loop
-     colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
-     colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
-     colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
-     colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
-     table1num
-     
+               print("DEBUG ON")
+               print(square)
+               print(vt)
+               print(vst)
+               print(var)
+               print(head(data))
+               
+               print("DEBUG OFF")
+               print("-------------------------------------------------------------------------------------------------")
+               
+               # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
+               c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
+               c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
+               print("debug 0")
+               print("c1")
+               print(c1)
+               print("c2")
+               print(c2)
+               
+               needtosplit<-"no"
+               if (length(c1)==length(c2)){
+                  if (sum(c1==c2)==length(c1)){
+                     data<-data[which(data$class1==sort(unique(data$class1))[1]),]
+                     print("debug1")
+                     needtosplit<-"no"
+                  }else{
+                     data<-data
+                     print("debug2")
+                     needtosplit<-"yes"
+                  }
+               }#end lengthcheck
+               print("needtosplit")
+               print(needtosplit)
+               #changeindex<-which(c1!=c2)
+               # 9. Define variable class (numeric or character)
+               datavec<-as.numeric(data$value)
+               print("debug3")
+               if (sum(is.na(datavec))==length(datavec)) {
+                  data$value<-as.character(data$value)
+               }else{
+                  data$value<-as.numeric(data$value)
+               }
+               # 10. if numeric
+               print("debug4")
+               print("class(data$value)")
+               print(class(data$value))
+               print("needtosplit")
+               print(needtosplit)
+               
+               print(class(data$value))
+               if (class(data$value)=="numeric" & needtosplit == "no"){
+                  print("debug5")
+                  count<-count+1#remove NA
+                  print(data)
+                  data<-data[which(!is.na(data$value)),]
+                  
+                  data$class2<-as.factor(data$class2)
+                  alln<-nrow(data)
+                  allmed<-median(data$value)
+                  alliqr<-IQR(data$value)
+                  
+                  
+                  sum<-data %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=data))
+                  
+                  if(stats!="fail"&length(class2names)==2){
+                     table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else if(length(class2names)==1) {
+                     table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
+                  }
+                  
+               }else if (class(data$value)=="numeric" & needtosplit == "yes"){
+                  print("debug6")
+                  #split data in 2 
+                  splitclasses<-sort(unique(data$class1))
+                  
+                  #PartA
+                  count<-count+1#remove NA
+                  data<-data[which(!is.na(data$value)),]
+                  dataS1<-data[which(data$class1==splitclasses[1]),]
+                  
+                  
+                  dataS1$class2<-as.factor(dataS1$class2)
+                  alln<-nrow(dataS1)
+                  allmed<-median(dataS1$value)
+                  alliqr<-IQR(dataS1$value)
+                  
+                  
+                  sum<-dataS1 %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=dataS1))
+                  if(stats!="fail"){
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else{
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+                  }
+                  
+                  
+                  
+                  
+                  
+                  #PartB
+                  count<-count+1#remove NA
+                  data<-data[which(!is.na(data$value)),]
+                  dataS2<-data[which(data$class1==splitclasses[2]),]
+                  
+                  
+                  dataS2$class2<-as.factor(dataS2$class2)
+                  alln<-nrow(dataS2)
+                  allmed<-median(dataS2$value)
+                  alliqr<-IQR(dataS2$value)
+                  
+                  
+                  sum<-dataS2 %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=dataS2))
+                  if(stats!="fail"){
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else{
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+                  }
+                  
+                  print("hey!")
+               }else if (class(data$value)=="character" & needtosplit == "no"){
+                  
+                  #remove NA
+                  data<-data[which(data$value!=""),]
+                  
+                  if (nrow(data)>0){
+                     data$class2<-as.factor(data$class2)
+                     alln<-nrow(data)
+                     data$value<-as.factor(data$value)
+                     ft<-ftable(class2~value,data=data)
+                     if(nrow(ft)>=2){
+                        ft[,1]<-ft[,1]/colSums(ft)[1]
+                        ft[,2]<-ft[,2]/colSums(ft)[2]
+                        statname="Chi-squared test"
+                        
+                        stats<-"fail"
+                        
+                        try(stats<-chisq.test(ft))
+                        
+                        ftdf<-as.data.frame((ft))
+                        class2names<-as.character(levels(ftdf$class2))
+                        ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
+                        ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
+                        
+                        #grp1<-paste(paste(ftdf1$value,ftdf1$Freq,sep=":"),collapse="__")
+                        #grp2<-paste(paste(ftdf2$value,ftdf2$Freq,sep=":"),collapse="__")
+                        
+                        grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
+                        grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
+                        
+                        count2<-count2+1
+                        if(stats!="fail"&length(class2names)==2){
+                           table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
+                        }else if(length(class2names)==1){
+                           table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
+                        }
+                     }#endif
+                     
+                  }#endif
+                  
+                  
+               }else if (class(data$value)=="character" & needtosplit == "yes"){
+                  print("need to split cat!")
+                  
+               }else{NULL}
+               
+               
+               
+            }#end vars loop
+         }#end varsubtypes loop  
+      }#end vartypes loop
+      colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
+      colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
+      colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
+      colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
+      table1num
+      
    })
    
    tablefunCAT<-reactive({
-     square<-squarephenofun()
-     table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
-                           "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
-     
-     table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
-     
-     count<-0
-     count2<-0
-     # 1. Get vartypes for square
-     query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
-     res<-cypher(graph,query)
-     vartypes<-res[,1]
-     
-     # 2. For loop over vartypes
-     for (vt in vartypes){
-       # 3. Get varsubtypes for vartype
-       
-       query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
-       res2<-cypher(graph,query)
-       varsubtypes<-res2[,1]
-       
-       # 4. For loop over varsubtypes
-       for (vst in varsubtypes){
-         # 5. Get variables for varsubtype
-         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
-         res3<-cypher(graph,query)
-         vars<-res3[,1]
-         # 6. For loop over variables
-         for (var in vars){
-           #count<-count+1
-           # 7. Get data for the variable
-           query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
+      square<-squarephenofun()
+      table1num<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"All median"=numeric(),"All IQR"=numeric(),
+                            "grp1 n"=integer(),"grp1 median"=numeric(),"grp1 IQR"=numeric(),"grp2 n"=numeric(),"grp2 median"=numeric(),"grp2 IQR"=numeric(),"testname"=character(),"P-value"=numeric())
+      
+      table1cat<-data.frame("vartype"=character(),"varsubtype"=character(),"var"=character(),"All n"=integer(),"grp1"=character(),"grp2"=character(),"testname"=character(),"P-value"=numeric())
+      
+      count<-0
+      count2<-0
+      # 1. Get vartypes for square
+      query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT(vt.name)",sep="")
+      res<-cypher(graph,query)
+      vartypes<-res[,1]
+      
+      # 2. For loop over vartypes
+      for (vt in vartypes){
+         # 3. Get varsubtypes for vartype
+         
+         query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' RETURN DISTINCT(vst.name)",sep="")
+         res2<-cypher(graph,query)
+         varsubtypes<-res2[,1]
+         
+         # 4. For loop over varsubtypes
+         for (vst in varsubtypes){
+            # 5. Get variables for varsubtype
+            query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' RETURN DISTINCT(pp.name)",sep="")
+            res3<-cypher(graph,query)
+            vars<-res3[,1]
+            print("vars")
+            print(vars)
+            # 6. For loop over variables
+            for (var in vars){
+               #count<-count+1
+               # 7. Get data for the variable
+               query<-paste("MATCH (pp:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) WHERE vt.name = '",vt,"' AND vst.name = '",vst,"' AND pp.name = '",var,"' RETURN 
                         pp.personName AS sampleID, pp.class1 AS class1, pp.class2 AS class2, pp.value AS value",sep="")
-           data<-cypher(graph,query)
-           
-           print("DEBUG ON")
-           print(square)
-           print(vt)
-           print(vst)
-           print(var)
-           print(head(data))
-           
-           print("DEBUG OFF")
-           
-           # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
-           c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
-           c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
-           needtosplit<-"no"
-           if (length(c1)==length(c2)){
-             if (sum(c1==c2)==length(c1)){
-               data<-data[which(data$class1==sort(unique(data$class1))[1]),]
-               print("debug1")
-               needtosplit<-"no"
-             }else{
-               data<-data
-               print("debug2")
-               needtosplit<-"yes"
-             }
-           }#end lengthcheck
-           
-           #changeindex<-which(c1!=c2)
-           # 9. Define variable class (numeric or character)
-           datavec<-as.numeric(data$value)
-           if (sum(is.na(datavec))==length(datavec)) {
-             data$value<-as.character(data$value)
-           }else{
-             data$value<-as.numeric(data$value)
-           }
-           # 10. if numeric
-           if (class(data$value)=="numeric" & needtosplit == "no"){
-             
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             
-             data$class2<-as.factor(data$class2)
-             alln<-nrow(data)
-             allmed<-median(data$value)
-             alliqr<-IQR(data$value)
-             
-             
-             sum<-data %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=dataS1))
-             
-             if(stats!="fail"&length(class2names)==2){
-               table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-             }else if(length(class2names)==1) {
-               table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
-             }
-             
-           }else if (class(data$value)=="numeric" & needtosplit == "yes"){
-             #split data in 2 
-             splitclasses<-sort(unique(data$class1))
-             
-             #PartA
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             dataS1<-data[which(data$class1==splitclasses[1]),]
-             
-             
-             dataS1$class2<-as.factor(dataS1$class2)
-             alln<-nrow(dataS1)
-             allmed<-median(dataS1$value)
-             alliqr<-IQR(dataS1$value)
-             
-             
-             sum<-dataS1 %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=dataS1))
-             if(stats!="fail"){
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-             }else{
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
-             }
-             
-             
-             
-             
-             
-             #PartB
-             count<-count+1#remove NA
-             data<-data[which(!is.na(data$value)),]
-             dataS2<-data[which(data$class1==splitclasses[2]),]
-             
-             
-             dataS2$class2<-as.factor(dataS2$class2)
-             alln<-nrow(dataS2)
-             allmed<-median(dataS2$value)
-             alliqr<-IQR(dataS2$value)
-             
-             
-             sum<-dataS2 %>%
-               group_by(class2) %>% 
-               summarise(n=n(),median = median(value),IQR = IQR(value))
-             
-             class2names<-as.character(sum$class2)
-             
-             statname="kruskal wallis"
-             stats<-"fail"
-             
-             try(stats<-kruskal.test(value~class2,data=dataS2))
-             if(stats!="fail"){
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
-             }else{
-               table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
-             }
-             
-             print("hey!")
-           }else if (class(data$value)=="character" & needtosplit == "no"){
-             
-             #remove NA
-             data<-data[which(data$value!=""),]
-             
-             if (nrow(data)>0){
-               data$class2<-as.factor(data$class2)
-               alln<-nrow(data)
-               data$value<-as.factor(data$value)
-               ft<-ftable(class2~value,data=data)
-               if(nrow(ft)>=2){
-                 ft[,1]<-ft[,1]/colSums(ft)[1]
-                 ft[,2]<-ft[,2]/colSums(ft)[2]
-                 statname="Chi-squared test"
-                 
-                 stats<-"fail"
-                 
-                 try(stats<-chisq.test(ft))
-                 
-                 ftdf<-as.data.frame((ft))
-                 class2names<-as.character(levels(ftdf$class2))
-                 ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
-                 ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
-                 
-                 grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
-                 grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
-                 
-                 count2<-count2+1
-                 if(stats!="fail"&length(class2names)==2){
-                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
-                 }else if(length(class2names)==1){
-                   table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
-                 }
-               }#endif
+               data<-cypher(graph,query)
                
-             }#endif
-             
-             
-           }else if (class(data$value)=="character" & needtosplit == "yes"){
-             print("need to split cat!")
-             
-           }else{NULL}
-           
-           
-           
-         }#end vars loop
-       }#end varsubtypes loop  
-     }#end vartypes loop
-     colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
-     colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
-     colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
-     colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
-     table1cat
-     
+               print("DEBUG ON")
+               print(square)
+               print(vt)
+               print(vst)
+               print(var)
+               print(head(data))
+               
+               print("DEBUG OFF")
+               print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+               
+               # 8. Check if the class1 subsets are identical. This is the case for matched samples (blood/fluid where the variable isn't different between blood and fluid, but not otherwise) select only data for one class1 type
+               c1<-sort(data$value[which(data$class1==unique(data$class1)[1])])
+               c2<-sort(data$value[which(data$class1==unique(data$class1)[2])])
+               print("debug 0")
+               print("c1")
+               print(c1)
+               print("c2")
+               print(c2)
+               
+               needtosplit<-"no"
+               if (length(c1)==length(c2)){
+                  if (sum(c1==c2)==length(c1)){
+                     data<-data[which(data$class1==sort(unique(data$class1))[1]),]
+                     print("debug1")
+                     needtosplit<-"no"
+                  }else{
+                     data<-data
+                     print("debug2")
+                     needtosplit<-"yes"
+                  }
+               }#end lengthcheck
+               print("needtosplit")
+               print(needtosplit)
+               #changeindex<-which(c1!=c2)
+               # 9. Define variable class (numeric or character)
+               datavec<-as.numeric(data$value)
+               print("debug3")
+               if (sum(is.na(datavec))==length(datavec)) {
+                  data$value<-as.character(data$value)
+               }else{
+                  data$value<-as.numeric(data$value)
+               }
+               # 10. if numeric
+               print("debug4")
+               
+               print("class(data$value)")
+               print(class(data$value))
+               print("needtosplit")
+               print(needtosplit)
+               
+               if (class(data$value)=="numeric" & needtosplit == "no"){
+                  print("debug5")
+                  count<-count+1#remove NA
+                  print(data)
+                  data<-data[which(!is.na(data$value)),]
+                  
+                  data$class2<-as.factor(data$class2)
+                  alln<-nrow(data)
+                  allmed<-median(data$value)
+                  alliqr<-IQR(data$value)
+                  
+                  
+                  sum<-data %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=data))#EDIT1
+                  
+                  if(stats!="fail"&length(class2names)==2){
+                     table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else if(length(class2names)==1) {
+                     table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
+                  }
+                  
+               }else if (class(data$value)=="numeric" & needtosplit == "yes"){
+                  print("debug6")
+                  #split data in 2 
+                  splitclasses<-sort(unique(data$class1))
+                  
+                  #PartA
+                  count<-count+1#remove NA
+                  data<-data[which(!is.na(data$value)),]
+                  dataS1<-data[which(data$class1==splitclasses[1]),]
+                  
+                  
+                  dataS1$class2<-as.factor(dataS1$class2)
+                  alln<-nrow(dataS1)
+                  allmed<-median(dataS1$value)
+                  alliqr<-IQR(dataS1$value)
+                  
+                  
+                  sum<-dataS1 %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=dataS1))
+                  if(stats!="fail"){
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else{
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+                  }
+                  
+                  
+                  
+                  
+                  
+                  #PartB
+                  count<-count+1#remove NA
+                  data<-data[which(!is.na(data$value)),]
+                  dataS2<-data[which(data$class1==splitclasses[2]),]
+                  
+                  
+                  dataS2$class2<-as.factor(dataS2$class2)
+                  alln<-nrow(dataS2)
+                  allmed<-median(dataS2$value)
+                  alliqr<-IQR(dataS2$value)
+                  
+                  
+                  sum<-dataS2 %>%
+                     group_by(class2) %>% 
+                     summarise(n=n(),median = median(value),IQR = IQR(value))
+                  
+                  class2names<-as.character(sum$class2)
+                  
+                  statname="kruskal wallis"
+                  stats<-"fail"
+                  
+                  try(stats<-kruskal.test(value~class2,data=dataS2))
+                  if(stats!="fail"){
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
+                  }else{
+                     table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
+                  }
+                  
+                  print("hey!")
+               }else if (class(data$value)=="character" & needtosplit == "no"){
+                  
+                  #remove NA
+                  data<-data[which(data$value!=""),]
+                  
+                  if (nrow(data)>0){
+                     data$class2<-as.factor(data$class2)
+                     alln<-nrow(data)
+                     data$value<-as.factor(data$value)
+                     ft<-ftable(class2~value,data=data)
+                     if(nrow(ft)>=2){
+                        ft[,1]<-ft[,1]/colSums(ft)[1]
+                        ft[,2]<-ft[,2]/colSums(ft)[2]
+                        statname="Chi-squared test"
+                        
+                        stats<-"fail"
+                        
+                        try(stats<-chisq.test(ft))
+                        
+                        ftdf<-as.data.frame((ft))
+                        class2names<-as.character(levels(ftdf$class2))
+                        ftdf1<-ftdf[which(ftdf$class2==class2names[1]),]
+                        ftdf2<-ftdf[which(ftdf$class2==class2names[2]),]
+                        
+                        #grp1<-paste(paste(ftdf1$value,ftdf1$Freq,sep=":"),collapse="__")
+                        #grp2<-paste(paste(ftdf2$value,ftdf2$Freq,sep=":"),collapse="__")
+                        
+                        grp1<-paste(paste(ftdf1$value,sprintf("%.2f",ftdf1$Freq),sep=":"),collapse="__")
+                        grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
+                        
+                        count2<-count2+1
+                        if(stats!="fail"&length(class2names)==2){
+                           table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
+                        }else if(length(class2names)==1){
+                           table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
+                        }
+                     }#endif
+                     
+                  }#endif
+                  
+                  
+               }else if (class(data$value)=="character" & needtosplit == "yes"){
+                  print("need to split cat!")
+                  
+               }else{NULL}
+               
+               
+               
+            }#end vars loop
+         }#end varsubtypes loop  
+      }#end vartypes loop
+      colnames(table1num)<-gsub("grp1",class2names[1],colnames(table1num))
+      colnames(table1num)<-gsub("grp2",class2names[2],colnames(table1num))
+      colnames(table1cat)<-gsub("grp1",class2names[1],colnames(table1cat))
+      colnames(table1cat)<-gsub("grp2",class2names[2],colnames(table1cat))
+      table1cat
+      
    })
    
    output$tableNUM<-renderDataTable(tablefunNUM())
@@ -1559,6 +1613,21 @@ server <- shinyServer(function(input, output) {
      thetab<-tablefunCAT()
      xtable(thetab,digits=3)
    },striped=TRUE,bordered=TRUE)
+   
+   # Downloadable csv of tableNUM
+   output$tablenumcsv <- downloadHandler(
+      filename = "tablenum.csv",
+      content = function(file) {
+         write.csv(tablefunNUM(), file, row.names = TRUE)
+      }
+   )
+   # Downloadable csv of tableCAT
+   output$tablecatcsv <- downloadHandler(
+      filename = "tablecat.csv",
+      content = function(file) {
+         write.csv(tablefunCAT(), file, row.names = TRUE)
+      }
+   )
    
    output$phenodatatable<-renderDataTable(phenoqueryfun())
    
@@ -2022,6 +2091,7 @@ server <- shinyServer(function(input, output) {
      #res<-signatureQuery()
      
      res<-signatureQuery()
+     res<-res[order(res$module),]
      
      if(whichSIGfun()!="all"){
        res2<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
@@ -2036,9 +2106,12 @@ server <- shinyServer(function(input, output) {
      
      #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      
+     if (vpplotfun()=="module"){
      vp<-ggplot(res,aes(logfc,-log10(p.adjPVAL)))+
-       geom_point(aes(col=logfc),size=9,alpha=0.4)+
-       scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
+       #geom_point(aes(col=logfc),size=9,alpha=0.4)+
+       geom_point(aes(col=module),size=6,alpha=0.7)+ 
+       #scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
+       scale_color_manual(values=unique(res$module))+
        #geom_text_repel(aes(label=SYMBOL),data=subset(res, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4 ),col="darkslategrey",size=6) +
        geom_text_repel(aes(label=SYMBOL),data=res2,col="darkslategrey",size=6) +
        geom_vline(xintercept=sliderval1, linetype="dashed", color = "red") +
@@ -2060,7 +2133,34 @@ server <- shinyServer(function(input, output) {
        #labs(y = phenofun2()) +
        ggtitle(paste(squareSIG,"edge:",reacedgeSIG)) +
        theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
-     
+     }else{
+        vp<-ggplot(res,aes(logfc,-log10(p.adjPVAL)))+
+           geom_point(aes(col=logfc),size=9,alpha=0.4)+
+           #geom_point(aes(col=module),size=9,alpha=0.5)+ 
+           scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
+           #scale_color_manual(values=unique(res$module))+
+           #geom_text_repel(aes(label=SYMBOL),data=subset(res, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4 ),col="darkslategrey",size=6) +
+           geom_text_repel(aes(label=SYMBOL),data=res2,col="darkslategrey",size=6) +
+           geom_vline(xintercept=sliderval1, linetype="dashed", color = "red") +
+           {if(whichSIGfun()=="all") geom_vline(xintercept=-sliderval1, linetype="dashed", color = "red")} +
+           geom_vline(xintercept=sliderval3, linetype="dashed", color = "blue") +
+           {if(whichSIGfun()=="all") geom_vline(xintercept=-sliderval3, linetype="dashed", color = "blue")} +
+           geom_hline(yintercept=sliderval2, linetype="dashed", color = "red") +
+           geom_hline(yintercept=sliderval4, linetype="dashed", color = "blue") +
+           #theme_tufte() +
+           theme_light() +
+           #theme_minimal() +
+           theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+           theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
+           theme(axis.text = element_text(size = rel(1.5))) +
+           #theme(legend.text = element_text(size = rel(1.2))) +
+           #theme(legend.title = element_text(size = rel(1.2))) +
+           #theme(legend.text=element_text(size=rel(1.4))) +
+           #theme(legend.key.size = unit(1,"cm")) +
+           #labs(y = phenofun2()) +
+           ggtitle(paste(squareSIG,"edge:",reacedgeSIG)) +
+           theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+     }
      
      vp
      
@@ -2301,6 +2401,95 @@ server <- shinyServer(function(input, output) {
      
    },height = 800)
    
+   output$moduleSankey<-renderSankeyNetwork({
+      reacstudySIG<-as.numeric(studySIGfun())
+      reacsetSIG<-as.numeric(squareSIGfun())
+      reacedgeSIG<-as.numeric(edgeSIGfun())
+      studySIG<-names(studies)[reacstudySIG]
+      setlistSIG<-setlistnameslist[[reacstudySIG]]
+      squareSIG<-setlistSIG[[reacsetSIG]]
+      
+      reacstudySIG2<-as.numeric(studySIGfun2())
+      reacsetSIG2<-as.numeric(squareSIGfun2())
+      reacedgeSIG2<-as.numeric(edgeSIGfun2())
+      studySIG2<-names(studies)[reacstudySIG2]
+      setlistSIG2<-setlistnameslist[[reacstudySIG2]]
+      squareSIG2<-setlistSIG2[[reacsetSIG2]]
+      
+      set1name<-paste("mDat",squareSIG,sep="")
+      set2name<-paste("mDat",squareSIG2,sep="")
+      print(set1name)
+      print(set2name)
+      set1<-allmodules[[set1name]][[2]]
+      set2<-allmodules[[set2name]][[2]]
+      set1df<-data.frame(cbind(names(set1),set1))
+      colnames(set1df)<-c("probe","module")
+      set2df<-data.frame(cbind(names(set2),set2))
+      colnames(set2df)<-c("probe","module")
+      set1modules<-paste(set1df$module,"S1",sep="")
+      set2modules<-paste(set2df$module,"S2",sep="")
+      set1df$module<-set1modules
+      set2df$module<-set2modules
+      
+      head(set1df)
+      
+      set1mlist<-unique(set1modules)
+      set2mlist<-unique(set2modules)
+      
+      nodes<-c(set1mlist,set2mlist)
+      nodes<-data.frame(nodes)
+      colnames(nodes)<-"name"
+      nodes<-cbind(seq(0,nrow(nodes)-1),nodes)
+      colnames(nodes)<-c("index","name")
+      
+      links<-data.frame(matrix(ncol=6,nrow=0),stringsAsFactors = FALSE)
+      colnames(links)<-c("source","value","target","node1","ngenes","node2")
+      a=0
+      b=length(set1mlist)+1
+      for (md1 in set1mlist){
+         b=length(set1mlist)+1
+         for (md2 in set2mlist){
+            probelist1<-set1df[which(set1df$module==md1),"probe"]
+            #print(head(probelist1))
+            probelist2<-set2df[which(set2df$module==md2),"probe"]
+            #print(head(probelist2))
+            count<-sum(probelist1%in%probelist2)
+            links<-rbind(links,list(a,b,count,md1,count,md2))
+            
+            b=b+1
+         }
+         a=a+1
+      }
+      colnames(links)<-c("source","target","value","node1","ngenes","node2")
+      head(links)
+      head(nodes)
+      links$source<-as.integer(links$source)
+      links$target<-as.integer(links$target-1)
+      links$value<-as.numeric(links$value)
+      links$ngenes<-as.numeric(links$ngenes)
+      
+      sum(links$value)
+      nrow(links)
+      
+      links2<-links[,1:3]
+      nodes2<-data.frame(nodes[,2],stringsAsFactors = FALSE)
+      colnames(nodes2)<-"name"
+      
+      #remove zero-count link table entries
+      links<-links[which(links$ngenes>0),]
+      
+      data<-list("nodes"=nodes2,"links"=links)
+      print("links and nodes done")
+      
+      print(sort(data$links$source))
+      print(sort(data$links$target))
+      
+      sankeyNetwork(Links = data$links, Nodes = data$nodes, Source = 'source',Target = 'target',Value = 'value', NodeID = 'name',fontSize = 12,LinkGroup = 'node1')
+      
+      
+      
+      
+   })
    
    #Single module####
    
@@ -2661,7 +2850,7 @@ server <- shinyServer(function(input, output) {
      res.pw4<-t(res.pw3c$SIG)
      
      colnames(res.pw4)<-rownames(res.pw3c)
-     plot4<-ggradar(res.pw4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pathway sig",axis.label.size = 4)}else{plot4<-ggtext("NOTHING")}
+     plot4<-ggradar(res.pw4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pathway sig",axis.label.size = 2)}else{plot4<-ggtext("NOTHING")}
      
      #####
      grid.arrange(plot1,plot2a,plot2,plot3a,plot3,plot4,nrow=2)

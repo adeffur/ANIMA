@@ -5,6 +5,7 @@
 #FROM rocker/verse:3.4.3
 #FROM rocker/verse:devel
 FROM rocker/verse:latest
+#FROM rocker/ml:latest
 
 #This is me
 MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
@@ -39,6 +40,7 @@ RUN rm -rf /tmp/*.rds \
     wordcloud \
     shinycssloaders \
     ggpubr \
+    psych \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 #install beamer
