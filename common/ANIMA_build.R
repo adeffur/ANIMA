@@ -1717,6 +1717,7 @@ colname<-contrast.variable
 #colnames(coef(decdat1))<-as.character(TS)
 decdat2<-as.matrix(coef(asCBC(decdat1,drop=FALSE)))
 decmat<-as.matrix(coef(decdat1))
+decmat_neo<-decmat
 colnames(decmat)<-as.character(TS)
 colnames(decdat2)<-as.character(TS)
 decmat.red<-decmat[apply(decmat,1,sum)>0,]
@@ -1724,6 +1725,66 @@ write.csv(decmat.red,file.path(dir.results,"cellprop_table.csv"))
 numbers<-as.vector(table(colnames(decmat.red)))
 names<-names(table(colnames(decmat.red)))
 nstring=paste("\nN=(",names[1]," ",numbers[1],",",names[2]," ",numbers[2],",",names[3]," ",numbers[3],",",names[4]," ",numbers[4],")",sep="")  
+
+#write cellprop table to neo4j
+#HERE
+#personCellprop
+# graphdata<-t(decmat_neo)
+# graphdata[,1]<-rownames(graphdata)
+# colnames(graphdata)[1]<-"personName"
+# write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+# query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personPheno:personPheno {name:{phenoname},personName:{personName},value:{persPheno},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personPheno)"
+# 
+# query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+#               MERGE (person:person {name:csvLine.personName}) MATCH (palwang:PalWangPW {name:csvLine.PalWangPW}) MERGE (gene)-[:mapsTo]->(palwang)",sep="")
+# cypher(graph,query)
+
+
+#########################
+##NEW
+
+graphdata<-t(decmat_neo)
+celltypelist<-colnames(graphdata)
+t = suppressMessages(newTransaction(graph))
+
+for (therow in 1:nrow(graphdata)) {
+  personName = as.character(rownames(graphdata)[therow])
+  
+  for (thecelltype in celltypelist){
+    persCell = graphdata[therow,thecelltype]
+    if(is.na(persCell)){persCell <- "not done"}
+    #class1g = graphdata[therow,contrast.variable1]
+    #class2g = graphdata[therow,contrast.variable2]
+    #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
+    query = "MERGE (person:person {name:{personName},square:{squareg}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg}}) MERGE (person)-[:has]->(personCell)"
+    
+    #if(!is.na(persPheno)){
+    suppressMessages(appendCypher(t, 
+                                  query,
+                                  personName = personName,
+                                  persCell = persCell,
+                                  cellname = thecelltype,
+                                  squareg = dataset.variables[[1]],
+                                  class2g = class2g,
+                                  class1g = class1g
+                                  
+                                  
+    ))
+    #}#end if
+    
+  }
+  
+  
+  
+}#end row
+
+suppressMessages(commit(t))
+
+
+########################
+
+
+##end new
 
 #stacked bar plot all types
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Prop_matrix_all_stacked_barplot.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1)
@@ -2497,6 +2558,52 @@ figure<-figure+1
 den0<-unlist(hm$Rowv)
 den<-den0[length(den0):1]
 par(parbackup)
+
+#########################
+##NEW
+
+graphdata<-t(allME)
+colnames(graphdata)<-MEcol
+MElist<-MEcol
+t = suppressMessages(newTransaction(graph))
+
+for (therow in 1:nrow(graphdata)) {
+  personName = as.character(rownames(graphdata)[therow])
+  
+  for (theME in MElist){
+    persME = graphdata[therow,theME]
+    if(is.na(persME)){persME <- "not done"}
+    #class1g = graphdata[therow,contrast.variable1]
+    #class2g = graphdata[therow,contrast.variable2]
+    #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
+    query = "MERGE (person:person {name:{personName},square:{squareg}}) MERGE (personME:personME {name:{MEname},personName:{personName},value:{persME},square:{squareg}}) MERGE (person)-[:has]->(personME)"
+    
+    #if(!is.na(persPheno)){
+    suppressMessages(appendCypher(t, 
+                                  query,
+                                  personName = personName,
+                                  persME = persME,
+                                  MEname = theME,
+                                  squareg = dataset.variables[[1]],
+                                  class2g = class2g,
+                                  class1g = class1g
+                                  
+                                  
+    ))
+    #}#end if
+    
+  }
+  
+  
+  
+}#end row
+
+suppressMessages(commit(t))
+
+
+########################
+
+
 }#end if
 
 #all modules

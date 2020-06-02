@@ -60,7 +60,7 @@ library(ggpubr)
 
 library(ggradar)
 library(gridExtra)
-
+library(cowplot)
 library(dplyr)
 
 scripts<-system(paste("ls","~/scripts"),intern=TRUE)
@@ -315,11 +315,11 @@ cellnames3<-cellnamelist3$cellname3
 print("cellcore3 ok")
 
 #load all module data
-load("~/output/build/allmodules.RData")
+load("~/output/build/allmodules.RData")   
   
 # Define UI 
 ui<-fluidPage(
-  #shinythemes::themeSelector(),
+  shinythemes::themeSelector(),
               titlePanel(paste("ANIMA REGO:",project)),
               sidebarLayout(
                 sidebarPanel(
@@ -331,6 +331,7 @@ ui<-fluidPage(
                              h3(paste('Phenotype:',project),style="color:#FF0000"),
                              fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33)),
                              fluidRow(column(4,uiOutput("choosePheno"),offset=.33)),
+                             fluidRow(column(4,selectInput("phenoclasses","choose classes",c("class1","class2","both")),offset=.33)),
                              fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,1500,500,50),offset=.33),column(3,downloadButton("tablenumcsv", "TableNUM")
 ),column(3,downloadButton("tablecatcsv", "TableCAT")
 ))
@@ -390,7 +391,11 @@ ui<-fluidPage(
                                column(5,sliderInput("volcanoFC","Log2 fold change: upper bound",-5,5,0,step=0.05),offset=.33)
                                
                              ),fluidRow(
-                                column(5,selectInput("vpcol","choose colour scheme",c("logfc","module"),selected="module",multiple=FALSE))
+                                column(2,selectInput("vpcol","choose colour scheme",c("logfc","module"),selected="module",multiple=FALSE)),
+                                
+                                column(2,selectInput("plotcellmat","plot cellprop matrix",c("yes","no"),selected="yes",multiple=FALSE)),
+                                column(3,sliderInput("scalefactor","scale second plot",0.7,1.3,1,step=0.005),offset=.33),
+                                column(3,sliderInput("plotheight2","plot height",1000,2000,1000,step=100),offset=.33)
                              )
                              ),
                     #INTERFACE ELEMENTS: Tabs
@@ -615,7 +620,7 @@ ui<-fluidPage(
                               tabsetPanel(
                                           tabPanel("Signature table",DT::dataTableOutput("sigTable1")),
                                           tabPanel("Volcano Plot",plotOutput("volcano")),
-                                          tabPanel("Heatmap",plotOutput("heatmap")),
+                                          tabPanel("Heatmap",uiOutput("heatmap")),
                                           tabPanel("Enrichment table",DT::dataTableOutput("enrichTable1")),
                                           tabPanel("Barplot",plotOutput("barplot1")),
                                           tabPanel("Dotplot",plotOutput("dotplot1")),
@@ -748,10 +753,14 @@ server <- shinyServer(function(input, output) {
    whichSIGfun<-reactive({input$whichsig})
    scaleSIGfun<-reactive({input$scale})
    vpplotfun<-reactive({input$vpcol})
+   cellmatfun<-reactive({input$plotcellmat})
+   heatheightfun<-reactive({input$plotheight2})
+   scalefactorfun<-reactive(input$scalefactor)
    #Pheno
    squarephenofun<-reactive({input$PhenoSquare})
    phenofun2<-reactive({input$phenochoice})
    phenoplotheightfun<-reactive({input$phenoplotheight})
+   classesfun<-reactive({input$phenoclasses})
    #G1
    usestudy<-reactive({input$study})
    useset<-reactive({c(input$datasetsCC)})
@@ -810,6 +819,10 @@ server <- shinyServer(function(input, output) {
    #Inflammasomes
    grxfun<-reactive({input$inflammasome})
    setfunMACHINE<-reactive({input$MACHINEset})
+   
+   
+   
+   
    #REACTIVE UI INPUT FUNCTIONS####
    
    #SP
@@ -1638,7 +1651,18 @@ server <- shinyServer(function(input, output) {
      data<-phenoqueryfun()
      print(data$numeric)
      print(is.na(data$numeric))
-     data$Categories<-interaction(data$class1,data$class2)
+     
+     byClass<-classesfun()
+     if (byClass=="class1"){
+        data$Categories<-data$class1
+     }else if (byClass=="class2"){
+        data$Categories<-data$class2
+     }else{
+        data$Categories<-interaction(data$class1,data$class2)
+        }
+     
+     
+     
      
      
      
@@ -1904,6 +1928,10 @@ server <- shinyServer(function(input, output) {
      cur_dev <- dev.cur()
      
      heatplot<-pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat0)),max(abs(plotmat0)),length.out=51),annotation_row = anndf2,main=paste(square,grxfun(),sep="_"))
+     
+     
+     
+     
      
      dev.set(cur_dev)
      print(heatplot)#pheatmap(plotmat0,cluster_rows = FALSE,cluster_cols = FALSE,scale = "none",col=blueWhiteRed(50),breaks=seq(-max(abs(plotmat)),max(abs(plotmat)),length.out=51),fontsize_row = 8,annotation_row = anndf2,main=paste(square,names(generegexlist)[grx],sep="_"),filename=file.path(figdir,paste(square,"_",names(generegexlist)[grx],".pdf",sep="")))
@@ -2183,7 +2211,8 @@ server <- shinyServer(function(input, output) {
      
    },height=900)
    
-   output$heatmap<-renderPlot({
+   #output$heatmap<-renderPlot({
+   output$heatmapMake<-renderPlot({
      
      scale<-scaleSIGfun()
      
@@ -2365,11 +2394,114 @@ server <- shinyServer(function(input, output) {
      print(ac)
      print("do heatmap")
      
-     heatm<-pheatmap(heatdata,annotation_col=annotation,annotation_row=rowAnn,show_rownames=boolrow,scale=scale,labels_row=res$SYMBOL,annotation_colors = ac)
-     dev.set(cur_dev)
-     print(heatm)
+     #order heatdata
+     heatdata<-heatdata[,order(colnames(heatdata))]
      
-   },height=1100)
+     if (cellmatfun()=="no"){
+        heatm<-pheatmap(heatdata,annotation_col=annotation,annotation_row=rowAnn,show_rownames=boolrow,scale=scale,labels_row=res$SYMBOL,annotation_colors = ac)
+        dev.set(cur_dev)
+        print(heatm)
+        
+     }else if (cellmatfun()=="yes"){
+        heatm<-pheatmap(heatdata,annotation_col=annotation,annotation_row=rowAnn,show_rownames=boolrow,scale=scale,labels_row=res$SYMBOL,annotation_colors = ac)
+        ##
+        #Adding in plot of cellproptable
+        
+        #get the data
+        
+        #modquery<-paste("MATCH (c:cellEx)-[r]-(n:wgcna {square:'",squareSIG2,"'}) WHERE c.name =~ '.*_xp_3' RETURN DISTINCT c.name AS cell,n.name AS module,r.qvalue AS qval",sep="")
+        
+        #query<-"MATCH (p:personCell {square:'blood.PCF.defPC'}) RETURN p.personName as person,p.name AS cell, p.value AS value"
+        query<-paste("MATCH (p:personCell {square:'",squareSIG2,"'}) RETURN p.personName as person,p.name AS cell, p.value AS value",sep="")
+        res<-cypher(graph,query)
+        
+        persons<-unique(res$person)
+        cells<-unique(res$cell)
+        dfc<-data.frame()
+        
+        for (person in persons) {
+           res2<-res[which(res$person==person),]
+           for (cell in cells){
+              dfc[person,cell]<-res2[which(res2$cell==cell),"value"]
+           }
+           
+        }
+        
+        dfc<-dfc[edges[[reacedgeSIG2]]$name,]
+        dfc<-t(dfc[order(rownames(dfc)),])
+        dfc<-dfc[,order.dendrogram(as.dendrogram(heatm$tree_col))]
+        dfc2<-melt(dfc)
+        colnames(dfc2)<-c("cell","person","value")
+        ##HERE
+        #bp<-barplot(as.matrix(dfc),las=2,col=brewer.pal(12,"Set3"),legend.text=rownames(dfc),beside=F,args.legend=c(x=ncol(dfc)*1.35,y=1,cex=.7))
+        bp2<-ggplot(res, aes(fill=cell, y=value, x=person)) + 
+           geom_bar(position="stack", stat="identity")
+        heatm2<-pheatmap(dfc,annotation_col=annotation,labels_row=rownames(dfc),cluster_cols=F)
+        
+        #########-
+        
+        query<-paste("MATCH (p:personME {square:'",squareSIG2,"'}) RETURN p.personName as person,p.name AS module, p.value AS value",sep="")
+        res<-cypher(graph,query)
+        
+        persons<-unique(res$person)
+        print(persons)
+        MEs<-unique(res$module)
+        print(MEs)
+        dfm<-data.frame()
+        
+        for (person in persons) {
+           res2<-res[which(res$person==person),]
+           print("debug 1")
+           for (ME in MEs){
+              dfm[person,ME]<-res2[which(res2$module==ME),"value"]
+              print("debug 2")
+           }
+           
+        }
+        dfm<-dfm[edges[[reacedgeSIG2]]$name,]
+        
+        dfm<-t(dfm[order(rownames(dfm)),])
+        print("debug 3")
+        dfm<-dfm[,order.dendrogram(as.dendrogram(heatm$tree_col))]
+        print("debug 4")
+        dfm2<-melt(dfm)
+        print("debug 5")
+        colnames(dfm2)<-c("ME","person","value")
+        print("debug 6")
+        ##HERE
+        #bp<-barplot(as.matrix(dfc),las=2,col=brewer.pal(12,"Set3"),legend.text=rownames(dfc),beside=F,args.legend=c(x=ncol(dfc)*1.35,y=1,cex=.7))
+        bp3<-ggplot(res, aes(fill=module, y=value, x=person)) + 
+           geom_bar(position="stack", stat="identity")
+        heatm3<-pheatmap(dfm,annotation_col=annotation,labels_row=rownames(dfm),cluster_cols=F)
+        
+        #########-
+        
+        
+        ##
+        plot_list<-list(heatm[[4]],heatm2[[4]],heatm3[[4]])
+        dev.set(cur_dev)
+        #g<-do.call(grid.arrange,plot_list)
+        #g<-grid.arrange(grobs=plot_list, ncol=1,nrow=2)
+        #g<-plot_grid(heatm[[4]],heatm2[[4]],ncol=1,nrow=2,greedy=F,scale=c(1,scalefactorfun()))
+        g<-plot_grid(heatm[[4]],heatm2[[4]],heatm3[[4]],ncol=1,align="v",scale=scalefactorfun(),rel_heights = c(2,1,1))
+        #ggsave("g.pdf",g)
+        print(g)
+        #print(heatm)
+        #barplot(as.matrix(dfc),las=2,col=brewer.pal(12,"Set3"),legend.text=rownames(dfc),beside=F,args.legend=c(x=ncol(dfc)*1.35,y=1,cex=.7))
+        #par(mfrow=c(1,1))
+     }
+     
+     
+     
+     
+    
+   })
+   output$heatmap <- renderUI({
+      plotOutput("heatmapMake", height = as.numeric(input$plotheight2))
+      #plotOutput("gigamat", height = 7000)
+   })
+   
+   
    #output:enrichPathway
    output$enrichTable1<-DT::renderDataTable(datatable(as.data.frame(enrichfun())),server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15))
    
