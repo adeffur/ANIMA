@@ -9,9 +9,11 @@ moduleMeta<-function(type="sets",extent=111,setlist=c("berry.train","berry.test"
   if(type=="sets"){
     #loop over datasets
     par(mfrow=c(1,1))
-    hmm.mat<-matrix(nrow=n.edges,ncol=258,data=NA)
+    #hmm.mat<-matrix(nrow=n.edges,ncol=258,data=NA)
+    hmm.mat<-matrix(nrow=n.edges,ncol=260,data=NA)
     hmm.mat.list<-list()
-    hmm.mat.col<-matrix(nrow=n.edges,ncol=258,data=NA)
+    #hmm.mat.col<-matrix(nrow=n.edges,ncol=258,data=NA)
+    hmm.mat.col<-matrix(nrow=n.edges,ncol=260,data=NA)
     hmm.mat.col.list<-list()
     for (set in setlist) {
       if(plotsimple==TRUE){
@@ -32,31 +34,58 @@ moduleMeta<-function(type="sets",extent=111,setlist=c("berry.train","berry.test"
       }
       
       for (edge in 1:n.edges){
-        query.base<-paste("MATCH (b:baylor) WHERE b.square = '",set,"' AND b.edge =",edgelist[edge]," OPTIONAL MATCH (b:baylor)-[r]-(n:wgcna) WHERE b.square = '",set,"' AND b.edge =",edgelist[edge]," RETURN b.name AS module, b.diffEX as diffEX, n.name AS wgcnacol, r.qvalue as qval",sep="")
+        query.base<-paste("MATCH (b:baylor) WHERE b.square = '",set,"' AND b.edge ='",edgelist[edge],"' OPTIONAL MATCH (b:baylor)-[r]-(n:wgcna) WHERE b.square = '",set,"' AND b.edge ='",edgelist[edge],"' RETURN b.name AS module, b.diffEX as diffEX, n.name AS wgcnacol, r.qvalue as qval",sep="")
         #print(query.base)
+        print("debug MM 1")
         res<-cypher(graph,query.base)
+        print(head(res))
+        print("debug MM 2")
         res<-res[order(res$qval),]
+        print("debug MM 3")
         res<-res[!duplicated(res$module),]
-      
-        if(nrow(res)>258){res<-res[which(res$module!='M8.90'),]}#hardcoded fix for M8.90 bug
+        print("debug MM 4")
+        print(nrow(res))
+        write.csv(res,"~/output/res.csv")
+        #if(nrow(res)>258){res<-res[which(res$module!='M8.90'),]}#hardcoded fix for M8.90 bug
+        if(nrow(res)>260){res<-res[which(res$module!='M8.90'),]}#hardcoded fix for M8.90 bug
+        print("debug MM 5")
         resA<-gsub("M", "", res$module)
+        
+        print("debug MM 6")
         resAA<-unlist(strsplit(resA,"[.]"))[seq(2,length(resA)*2,2)]
+        print("debug MM 7")
         resAAA<-sprintf("%03s",resAA)
+        print("debug MM 8")
         resAAAA<-unlist(strsplit(resA,"[.]"))[seq(1,length(resA)*2,2)]
+        print("debug MM 9")
         resAAAAA<-paste("M",resAAAA,".",resAAA,sep="")
+        print("debug MM 10")
         res<-res[order(resAAAAA),]
+        print("debug MM 11")
         res$wgcnacol[which(is.na(res$wgcnacol))]<-"gray"
+        print("debug MM 12")
         
         hmdata.col<-res$wgcnacol
-        hmdata<-res$diffEX
+        print("debug MM 13")
+        hmdata<-as.numeric(res$diffEX)
+        print("debug MM 14")
+        print(hmdata)
+        print(head(hmm.mat))
         hmm.mat[edge,]<-hmdata
+        print("debug MM 15")
         hmm.mat.col[edge,]<-hmdata.col
+        print("debug MM 16")
         dimensions<-strsplit(res$module,".",fixed=T)
+        print("debug MM 17")
         coords.rows=as.numeric(unlist(lapply(dimensions,function(x){strsplit(x[1],"M",fixed=T)[[1]][2]})))*n.edges-(2+n.edges-edge)
         #
+        print("debug MM 18")
         coords.cols=unlist(lapply(dimensions,function(x){x[2]}))
+        print("debug MM 19")
         coords.all=cbind(as.numeric(coords.rows),as.numeric(coords.cols))
+        print("debug MM 20")
         coords.all[,1]<-(coords.all[,1]-9*n.edges+1)*-1
+        print("debug MM 21")
         for (cgc in 1:nrow(coords.all)){
           cord<-c(coords.all[cgc,2],coords.all[cgc,1])
           #print(cord)
@@ -75,10 +104,16 @@ moduleMeta<-function(type="sets",extent=111,setlist=c("berry.train","berry.test"
       #   }
       #   
       #   dimnames(hmm.mat)<-list(paste("edge",edgelist,sep=""),labfin)
+      print("debug MM 22")
       dimnames(hmm.mat)<-list(unlist(edgelist),res$module)
+      print("debug MM 23")
       dimnames(hmm.mat.col)<-list(unlist(edgelist),res$module)
+      print("debug MM 24")
       hmm.mat.list[[set]]<-hmm.mat
+      
+      print("debug MM 25")
       hmm.mat.col.list[[set]]<-hmm.mat.col
+      print("debug MM 26")
     }#end sets
     
   }else if(type=="edges"){
@@ -141,6 +176,7 @@ moduleMeta<-function(type="sets",extent=111,setlist=c("berry.train","berry.test"
     }#end edgewise
   }
   moduleMetaList<-list(hmm.mat.list,hmm.mat.col.list)
+  
   return(moduleMetaList)
 }
 
