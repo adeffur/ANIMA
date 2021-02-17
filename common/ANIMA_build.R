@@ -49,22 +49,48 @@
   neoinsert<-"on" #debug
   if (neoinsert=="on"){
   #initialise neo4j db
-    graph<-startGraph(graphstring)#using docker for Mac!
+    graph<-startGraph(graphstring,"animadb")#using docker for Mac!
     graph$version
     #print("clearing graph")
     #clear(graph,input=FALSE)
+    # print("graph clear, making indexes")
+    # addIndex(graph,"PROBE","name")
+    # addIndex(graph,"PROBE","square")
+    # addIndex(graph,"PROBE","edge")
+    # addIndex(graph,"SYMBOL","name")
+    # addIndex(graph,"PROBETYPE","name")
+    # addIndex(graph,"baylor","name")
+    # addIndex(graph,"PalWangPW","name")
+    # addIndex(graph,"ImmunePW","name")
+    # addIndex(graph,"reactomePW","name")
+    # print("These are the indexes:")
+    # getIndex(graph)
+    
     print("graph clear, making indexes")
-    addIndex(graph,"PROBE","name")
-    addIndex(graph,"PROBE","square")
-    addIndex(graph,"PROBE","edge")
-    addIndex(graph,"SYMBOL","name")
-    addIndex(graph,"PROBETYPE","name")
-    addIndex(graph,"baylor","name")
-    addIndex(graph,"PalWangPW","name")
-    addIndex(graph,"ImmunePW","name")
-    addIndex(graph,"reactomePW","name")
+    
+    cypher(graph, 'CREATE INDEX ON :PROBE(name)')
+    cypher(graph, 'CREATE INDEX ON :PROBE(square)')
+    cypher(graph, 'CREATE INDEX ON :PROBE(edge)')
+    cypher(graph, 'CREATE INDEX ON :SYMBOL(name)')
+    cypher(graph, 'CREATE INDEX ON :PROBETYPE(name)')
+    cypher(graph, 'CREATE INDEX ON :baylor(name)')
+    cypher(graph, 'CREATE INDEX ON :PalWangPW(name)')
+    cypher(graph, 'CREATE INDEX ON :ImmunePW(name)')
+    cypher(graph, 'CREATE INDEX ON :reactomePW(name)')
+    
+    cypher(graph, 'CREATE INDEX ON :person(name)')
+    cypher(graph, 'CREATE INDEX ON :person(square)')
+    cypher(graph, 'CREATE INDEX ON :person(class1)')
+    cypher(graph, 'CREATE INDEX ON :person(class2)')
+    
+    cypher(graph, 'CREATE INDEX ON :personPheno(name)')
+    cypher(graph, 'CREATE INDEX ON :personPheno(personName)')
+    cypher(graph, 'CREATE INDEX ON :personPheno(square)')
+    cypher(graph, 'CREATE INDEX ON :personPheno(class1)')
+    cypher(graph, 'CREATE INDEX ON :personPheno(class2)')
     print("These are the indexes:")
-    getIndex(graph)
+    res<-cypher(graph, 'CALL db.indexes()')
+    print(res)
   }
 
 #Switch Cytoscape on/off
@@ -144,7 +170,8 @@ platforms<-c()
 
 #outer loop (production) 
 for (q.i in 1:length(questions)){
-
+#for (q.i in 4:length(questions)){ #DEBUG
+    
 #Definitions for the current question####
   #Question (c.q: "current question")
   c.q=questions[[q.i]]
@@ -346,7 +373,7 @@ figure<-1
     #if ((q.i==1 & i==1)|(q.i==2 & i==1)) {#debug; hardcoded #IMPI
     #if ((q.i==1 & i==1)|(q.i==9 & i==1)) {#debug; hardcoded #current GBP
       
-    nodes<-RNeo4j::nodes
+    #nodes<-RNeo4j::nodes
     platform = getChipInfo(datalist[[i]])$chipVersion[1]
       
     if (!(platform%in%platforms)){
@@ -401,40 +428,85 @@ figure<-1
     ##NEW
     pdx<-pd2[,varclass%in%c("n","c")]
     graphdata<-pdx
-    phenolist<-names(graphdata)
-    t = suppressMessages(newTransaction(graph))
-    
-    for (therow in 1:nrow(graphdata)) {
-      personName = as.character(rownames(graphdata)[therow])
-      
-      for (thepheno in phenolist){
-        persPheno = graphdata[therow,thepheno]
-        if(is.na(persPheno)){persPheno <- "not done"}
-        class1g = graphdata[therow,contrast.variable1]
-        class2g = graphdata[therow,contrast.variable2]
-        query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personPheno:personPheno {name:{phenoname},personName:{personName},value:{persPheno},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personPheno)"
-        
-        #if(!is.na(persPheno)){
-        suppressMessages(appendCypher(t, 
-                                      query,
-                                      personName = personName,
-                                      persPheno = persPheno,
-                                      phenoname = thepheno,
-                                      squareg = dataset.variables[[1]],
-                                      class2g = class2g,
-                                      class1g = class1g
-                                      
-                                      
-        ))
-        #}#end if
-        
-      }
-      
-      
-      
-    }#end row
+    #phenolist<-names(graphdata)
+    #graphdata[]<-lapply(graphdata,function(x){gsub("'","*",x)}) #remove apostrophes
+    #write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+    graphdata<-rownames_to_column(graphdata, var = "personName")
+    newvars<-graphdata[,c("personName",contrast.variable1,contrast.variable2)]
+    newname<-paste("personName",contrast.variable1,contrast.variable2,sep=";")
+    splitname<-as.character(strsplit2(newname,";"))
+    newvars<-as.data.frame(newvars)
+    newvars<-newvars %>% unite(newname,1:3,remove = TRUE,sep=";")
+    colnames(newvars)<-newname
+    graphdata<-cbind(newvars,graphdata)
+    graphdata<-dplyr::select(graphdata, -c("personName",contrast.variable1,contrast.variable2))
+    graphdata<-pivot_longer(graphdata,cols=!newname,names_to="personPhenoName",values_to="personPhenoValue",names_repair="unique")
+    graphdata<-as.data.frame(graphdata)
+    graphdata<-separate(graphdata,1,into=splitname,sep=";")
    
-    suppressMessages(commit(t))
+    
+    write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+   
+    query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+
+  MERGE (person:person {name:csvLine.personName,square:'",dataset.variables[1],"',class1:",paste("csvLine['",contrast.variable1,"']",sep=""),",class2:",paste("csvLine['",contrast.variable2,"']",sep=""),"})
+  MERGE (personPheno:personPheno {name:csvLine.personPhenoName,personName:csvLine.personName,value:csvLine.personPhenoValue,square:'",dataset.variables[1],"'})
+  MERGE (person)-[:has]->(personPheno)
+   ",sep="",collapse="")
+
+  #   query = paste("USING PERIODIC COMMIT 10000 LOAD CSV FROM 'file:///tmp.csv' AS csvLine
+  # 
+  # MERGE (person:person {name:csvLine[1],square:'",dataset.variables[1],"',class1:csvLine[2],class2:csvLine[3]})
+  # MERGE (personPheno:personPheno {name:csvLine[4],personName:csvLine[1],value:csvLine[5],square:'",dataset.variables[1],"'})
+  # MERGE (person)-[:has]->(personPheno)
+  #  ",sep="",collapse="")
+    
+    cypher(graph,query)
+    #cypher(graph,"CALL db.clearQueryCaches()")
+    
+    #########
+    #t = suppressMessages(newTransaction(graph))
+
+    # for (therow in 1:nrow(graphdata)) {
+    #   print(therow)
+    #   personName = as.character(rownames(graphdata)[therow])
+    # 
+    #   for (thepheno in phenolist){
+    #     persPheno = graphdata[therow,thepheno]
+    #     
+    #     #print(persPheno)
+    #     if(is.na(persPheno)){persPheno <- "not done"}
+    #     class1g = graphdata[therow,contrast.variable1]
+    #     class2g = graphdata[therow,contrast.variable2]
+    #     query = paste("MERGE (person:person {name:'",personName,"',square:'",dataset.variables[[1]],"',class1:'",class1g,"',class2:'",class2g,"'}) MERGE (personPheno:personPheno {name:'",thepheno,"',personName:'",personName,"',value:'",persPheno,"',square:'",dataset.variables[[1]],"',class1:'",class1g,"',class2:'",class2g,"'}) MERGE (person)-[:has]->(personPheno)",sep="",collapse="")
+    #     #print(query)
+    #     cypher(graph,query)
+    #     #print("cypher ok")
+    # 
+    #     #if(!is.na(persPheno)){
+    #     # suppressMessages(appendCypher(t,
+    #     #                               query,
+    #     #                               personName = personName,
+    #     #                               persPheno = persPheno,
+    #     #                               phenoname = thepheno,
+    #     #                               squareg = dataset.variables[[1]],
+    #     #                               class2g = class2g,
+    #     #                               class1g = class1g
+    #     # 
+    #     # 
+    #     # ))
+    #     #}#end if
+    # 
+    #   }#end insertion 
+    # 
+    # 
+    # 
+    # }#end row
+
+    #suppressMessages(commit(t))
+    #############
+
+    
     
     #END NEW
     
@@ -1640,12 +1712,12 @@ for (edge in 1:5){
   top4Kdata.merge<-merge(top4Kdata,probemap,by.x=0,by.y="nuID",all.x=T,all.y=F)
   colnames(top4Kdata.merge)[length(colnames(top4Kdata.merge))]<-"SYMBOL2"
   
-  nodes<-RNeo4j::nodes
+  #nodes<-RNeo4j::nodes
   #network-specific cypher query
   write.csv(top4Kdata.merge,file.path(dir.import,"tmp.csv"))
   
   query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-  CREATE (probe:PROBE {name:csvLine.nuID,square:'",dataset.variables[[1]],"',edge:toInt(",edge,"),contrastvar:'",contrastvars[[edge]],"',contrast:'",pathways[[edge]][[2]],"-",pathways[[edge]][[1]],"',logfc:toFloat(csvLine.logFC),aveEXPR:toFloat(csvLine.AveExpr),adjPVAL:toFloat(csvLine['adj.P.Val'])})
+  CREATE (probe:PROBE {name:csvLine.nuID,square:'",dataset.variables[[1]],"',edge:'",edge,"',contrastvar:'",contrastvars[[edge]],"',contrast:'",pathways[[edge]][[2]],"-",pathways[[edge]][[1]],"',logfc:toFloat(csvLine.logFC),aveEXPR:toFloat(csvLine.AveExpr),adjPVAL:toFloat(csvLine['adj.P.Val'])})
   MERGE (gene:SYMBOL {name:csvLine.SYMBOL2})
   CREATE (probe)-[:mapsTo]->(gene)",sep="")
   cypher(graph,query)
@@ -1692,7 +1764,7 @@ figure<-figure+1
 #make Marker lists
 am<-MarkerList(Abbas)
 am2<-MarkerList("HaemAtlas")
-am2NU<-convertIDs(am2, 'lumiHumanAll.db', 'illuminaHumanv2.db')#nuID
+#am2NU<-convertIDs(am2, 'lumiHumanAll.db', 'illuminaHumanv2.db')#nuID #breaks in R version 4
 
 AbbasRS<-convertIDs(am,'REFSEQ')
 Abbassym<-convertIDs(am,'SYMBOL')
@@ -1726,59 +1798,65 @@ numbers<-as.vector(table(colnames(decmat.red)))
 names<-names(table(colnames(decmat.red)))
 nstring=paste("\nN=(",names[1]," ",numbers[1],",",names[2]," ",numbers[2],",",names[3]," ",numbers[3],",",names[4]," ",numbers[4],")",sep="")  
 
-#write cellprop table to neo4j
-#HERE
-#personCellprop
-# graphdata<-t(decmat_neo)
-# graphdata[,1]<-rownames(graphdata)
-# colnames(graphdata)[1]<-"personName"
-# write.csv(graphdata,file.path(dir.import,"tmp.csv"))
-# query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personPheno:personPheno {name:{phenoname},personName:{personName},value:{persPheno},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personPheno)"
-# 
-# query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-#               MERGE (person:person {name:csvLine.personName}) MATCH (palwang:PalWangPW {name:csvLine.PalWangPW}) MERGE (gene)-[:mapsTo]->(palwang)",sep="")
-# cypher(graph,query)
-
 
 #########################
 ##NEW
 
-graphdata<-t(decmat_neo)
+graphdata<-as.data.frame(t(decmat_neo))
 celltypelist<-colnames(graphdata)
-t = suppressMessages(newTransaction(graph))
+graphdata<-rownames_to_column(graphdata, var = "personName")
+graphdata<-graphdata %>% pivot_longer(cols=-c("personName"),names_to="personCellName",values_to="personCellValue")
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-for (therow in 1:nrow(graphdata)) {
-  personName = as.character(rownames(graphdata)[therow])
-  
-  for (thecelltype in celltypelist){
-    persCell = graphdata[therow,thecelltype]
-    if(is.na(persCell)){persCell <- "not done"}
-    #class1g = graphdata[therow,contrast.variable1]
-    #class2g = graphdata[therow,contrast.variable2]
-    #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
-    query = "MERGE (person:person {name:{personName},square:{squareg}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg}}) MERGE (person)-[:has]->(personCell)"
-    
-    #if(!is.na(persPheno)){
-    suppressMessages(appendCypher(t, 
-                                  query,
-                                  personName = personName,
-                                  persCell = persCell,
-                                  cellname = thecelltype,
-                                  squareg = dataset.variables[[1]],
-                                  class2g = class2g,
-                                  class1g = class1g
-                                  
-                                  
-    ))
-    #}#end if
-    
-  }
-  
-  
-  
-}#end row
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
 
-suppressMessages(commit(t))
+  MERGE (person:person {name:csvLine.personName,square:'",dataset.variables[1],"'})
+  MERGE (personCell:personCell {name:csvLine.personCellName,personName:csvLine.personName,value:csvLine.personCellValue,square:'",dataset.variables[1],"'})
+  MERGE (person)-[:has]->(personCell)
+   ",sep="",collapse="")
+
+cypher(graph,query)
+
+
+
+# for (therow in 1:nrow(graphdata)) {
+#   personName = as.character(rownames(graphdata)[therow])
+#   
+#   for (thecelltype in celltypelist){
+#     persCell = graphdata[therow,thecelltype]
+#     if(is.na(persCell)){persCell <- "not done"}
+#     #class1g = graphdata[therow,contrast.variable1]
+#     #class2g = graphdata[therow,contrast.variable2]
+#     personName = personName
+#     persCell = persCell
+#     cellname = thecelltype
+#     squareg = dataset.variables[[1]]
+#     class2g = class2g
+#     class1g = class1g
+#     #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
+#     query = paste("MERGE (person:person {name:'",personName,"',square:'",squareg,"'}) MERGE (personCell:personCell {name:'",cellname,"',personName:'",personName,"',value:'",persCell,"',square:'",squareg,"'}) MERGE (person)-[:has]->(personCell)",sep="",collapse="")
+#     cypher(graph,query)
+#     #if(!is.na(persPheno)){
+#     # suppressMessages(appendCypher(t, 
+#     #                               query,
+#     #                               personName = personName,
+#     #                               persCell = persCell,
+#     #                               cellname = thecelltype,
+#     #                               squareg = dataset.variables[[1]],
+#     #                               class2g = class2g,
+#     #                               class1g = class1g
+#     #                               
+#     #                               
+#     # ))
+#     #}#end if
+#     
+#   }
+#   
+#   
+#   
+# }#end row
+
+
 
 
 ########################
@@ -2562,49 +2640,74 @@ par(parbackup)
 #########################
 ##NEW
 
-graphdata<-t(allME)
+##
+graphdata<-as.data.frame(t(allME))
 colnames(graphdata)<-MEcol
 MElist<-MEcol
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  personName = as.character(rownames(graphdata)[therow])
-  
-  for (theME in MElist){
-    persME = graphdata[therow,theME]
-    if(is.na(persME)){persME <- "not done"}
-    #class1g = graphdata[therow,contrast.variable1]
-    #class2g = graphdata[therow,contrast.variable2]
-    #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
-    query = "MERGE (person:person {name:{personName},square:{squareg}}) MERGE (personME:personME {name:{MEname},personName:{personName},value:{persME},square:{squareg}}) MERGE (person)-[:has]->(personME)"
-    
-    #if(!is.na(persPheno)){
-    suppressMessages(appendCypher(t, 
-                                  query,
-                                  personName = personName,
-                                  persME = persME,
-                                  MEname = theME,
-                                  squareg = dataset.variables[[1]],
-                                  class2g = class2g,
-                                  class1g = class1g
-                                  
-                                  
-    ))
-    #}#end if
-    
-  }
-  
-  
-  
-}#end row
 
-suppressMessages(commit(t))
+graphdata<-rownames_to_column(graphdata, var = "personName")
+graphdata<-graphdata %>% pivot_longer(cols=-c("personName"),names_to="personMEName",values_to="personMEValue")
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+
+  MERGE (person:person {name:csvLine.personName,square:'",dataset.variables[1],"'})
+  MERGE (personME:personME {name:csvLine.personMEName,personName:csvLine.personName,value:csvLine.personMEValue,square:'",dataset.variables[1],"'})
+  MERGE (person)-[:has]->(personME)
+   ",sep="",collapse="")
+
+cypher(graph,query)
+
+##
+
+
+#t = suppressMessages(newTransaction(graph))
+
+# for (therow in 1:nrow(graphdata)) {
+#   personName = as.character(rownames(graphdata)[therow])
+#   
+#   for (theME in MElist){
+#     persME = graphdata[therow,theME]
+#     if(is.na(persME)){persME <- "not done"}
+#     class2g = class2g
+#     class1g = class1g
+#     #class1g = graphdata[therow,contrast.variable1]
+#     #class2g = graphdata[therow,contrast.variable2]
+#     #query = "MERGE (person:person {name:{personName},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (personCell:personCell {name:{cellname},personName:{personName},value:{persCell},square:{squareg},class1:{class1g},class2:{class2g}}) MERGE (person)-[:has]->(personCell)"
+#     query = paste("MERGE (person:person {name:'",personName,"',square:'",squareg,"'}) MERGE (personME:personME {name:'",theME,"',personName:'",personName,"',value:'",persME,"',square:'",squareg,"'}) MERGE (person)-[:has]->(personME)",sep="",collapse = "")
+#     cypher(graph,query)
+#     #if(!is.na(persPheno)){
+#     # suppressMessages(appendCypher(t, 
+#     #                               query,
+#     #                               personName = personName,
+#     #                               persME = persME,
+#     #                               MEname = theME,
+#     #                               squareg = dataset.variables[[1]],
+#     #                               class2g = class2g,
+#     #                               class1g = class1g
+#     #                               
+#     #                               
+#     # ))
+#     #}#end if
+#     
+#   }
+#   
+#   
+#   
+# }#end row
+
+#suppressMessages(commit(t))
 
 
 ########################
 
 
 }#end if
+
+
+#HERE DEBUG HERE
+
 
 #all modules
 for(edge in 1:length(edges)){
@@ -2831,442 +2934,442 @@ dev.off()
 figure<-figure+1
 }
 #11.b NETWORK 2b: Quantifying module flow cell-proportion associations####
-if (dataset.variables[[i]]=="berry.test"){
-#NETWORK 2 raw data
-# Define numbers of genes and samples
-nGenes = ncol(datExpr);
-nSamples = nrow(datExpr);
-# Recalculate MEs with color labels
-#MEs0 = moduleEigengenes(datExpr, bwmoduleColors)$eigengenes#not required
-
-cellprops2_raw<-read.csv("/home/rstudio/source_data/Flow_props_test.csv")
-idmapper<-pd2[,c(4,2,7,12)]
-cellprops2_2<-merge(idmapper,cellprops2_raw,by.x="site_donor_id",by.y="site_donor_id",all.x=TRUE,all.y=TRUE)
-
-#remove 
-#reorder
-cellprops2_3<-cellprops2_2[which(!is.na(cellprops2_2$sample_name)),]
-cellprops2_3$comboname<-paste(cellprops2_3$class,cellprops2_3$sex,sep=".")
-cellprops2<-cellprops2_3[match(pd2$sample_name,cellprops2_3$sample_name),]
-cellprops2m<-as.matrix(cellprops2[,5:(ncol(cellprops2)-1)])
-dimnames(cellprops2m)[[1]]<-cellprops2$comboname
-
-MEs0=bwMEs
-MEs = orderMEs(MEs0)
-moduleCellCor = cor(MEs, cellprops2m, use = "p");
-retain<-!apply(moduleCellCor,2,is.na)[1,]
-moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-
-moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-#edges
-write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor.csv",sep="")))
-#edge annotation
-write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor_qvalue.csv",sep="")))
-#Will display correlations and their BH adjusted q-values
-textMatrix = paste(signif(moduleCellCor, 2), "\n(",
-                 signif(moduleCellQvalue, 1), ")", sep = "");
-dim(textMatrix) = dim(moduleCellCor)
-
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
-par(mar = c(6,10,3,2));par(mfrow=c(1,1))
-# Display the correlation values within a heatmap plot
-labeledHeatmap(Matrix = moduleCellCor[den,],
-             xLabels = colnames(cellprops2m),
-             yLabels = names(MEs)[den],
-             ySymbols = names(MEs)[den],
-             colorLabels = FALSE,
-             colors = blueWhiteRed(50),
-             textMatrix = textMatrix[den,],
-             setStdMargins = FALSE,
-             cex.text = 0.9,
-             zlim = c(-1,1),
-             main = paste("ME-celltype correlation"))
-par(parbackup)
-dev.off()
-figure<-figure+1
-
-# clustered version, with NA columns removed
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_clust.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
-par(mar = c(2,2,2,5));par(cex.main=.5);
-heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main="Clustered module-cell relationships",mar=c(5,1),cexRow=.8,cexCol=.8)
-par(parbackup)
-dev.off()
-figure<-figure+1
-
-#edgewise module cell associations
-
-for (edge in 1:length(edges)){
-nSamples=length(edges[[edge]])
-
-#Correlate MEs and cellprops2m
-narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
-datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
-moduleCellCor = cor(ME.edges[[edge]], cellprops2m[edges[[edge]],], use = "p");
-retain<-!apply(moduleCellCor,2,is.na)[1,]
-moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-#edges
-write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_edge",edge,".csv",sep="")))
-#edge annotation
-write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_qvalue_edge",edge,".csv",sep="")))
-
-#Display correlation matrix
-# Will display correlations and their BH-adjusted p-values
-textMatrix = paste(signif(moduleCellCor, 2), "\n(",
-                   signif(moduleCellQvalue, 1), ")", sep = "");
-dim(textMatrix) = dim(moduleCellCor)
-
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_edge',edge,'.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
-par(mar = c(8,10,2,3));par(mfrow=c(1,1))
-# Display the correlation values within a heatmap plot
-labeledHeatmap(Matrix = moduleCellCor,
-               xLabels = colnames(cellprops2m)[retain],
-               yLabels = names(ME.edges[[edge]]),
-               ySymbols = names(ME.edges[[edge]]),
-               colorLabels = FALSE,
-               colors = blueWhiteRed(50),
-               textMatrix = textMatrix,
-               setStdMargins = FALSE,
-               cex.text = 0.9,
-               zlim = c(-1,1),
-               main = paste("ME-celltype correlation",names(edges)[edge],"with",datapoints,"datapoints"))
-par(parbackup)
-figure<-figure+1
-dev.off()
-
-# clustered version, with NA columns removed
-
-par(mar = c(2,2,2,5));par(cex.main=.5);
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_edge_clust',edge,'.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
-heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main=paste("Clustered module-Cell relationships",names(edges)[edge]),mar=c(5,1),cexRow=.8,cexCol=.8)
-par(parbackup)
-dev.off()
-figure<-figure+1
-}
-
-
-
-##test ratio
-#stats for comparisons (edge 5)
-tests<-data.frame()
-testsdata<-t(cellprops2m)
-
-statlist<-list()
-ratiolist<-list()
-for (k in 1:nrow(testsdata)) {
-
-statlist[[k]]<-
-  wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
-
-ratiolist[[k]]<-
-  median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
-
-}
-tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(5,nrow(tests))
-flowcellproptests.flat<-tests
-write.csv(flowcellproptests.flat,file=file.path(dir.results,paste("FLOWStats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
-
-
-
-#stats for comparisons 4 edges
-tests<-data.frame()
-
-testsdata<-t(cellprops2m)
-for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
-statlist<-list()
-ratiolist<-list()
-for (k in 1:nrow(testsdata)) {
-  
-  statlist[[k]]<-
-    wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
-  
-  ratiolist[[k]]<-
-    median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
-  
-}
-tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-}
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(1:4,nrow(tests)/4)
-flowcellproptests.edge<-tests
-write.csv(flowcellproptests.edge,file=file.path(dir.results,paste("FLOW_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edge_wilcox.csv",sep="")))
-
-#combine stats and save
-flowcellproptests<-rbind(flowcellproptests.edge,flowcellproptests.flat)
-write.csv(flowcellproptests,file=file.path(dir.results,paste("FLOW_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
-
-##end ratio
-
-
-}#end if
+# if (dataset.variables[[i]]=="berry.test"){
+# #NETWORK 2 raw data
+# # Define numbers of genes and samples
+# nGenes = ncol(datExpr);
+# nSamples = nrow(datExpr);
+# # Recalculate MEs with color labels
+# #MEs0 = moduleEigengenes(datExpr, bwmoduleColors)$eigengenes#not required
+# 
+# cellprops2_raw<-read.csv("/home/rstudio/source_data/Flow_props_test.csv")
+# idmapper<-pd2[,c(4,2,7,12)]
+# cellprops2_2<-merge(idmapper,cellprops2_raw,by.x="site_donor_id",by.y="site_donor_id",all.x=TRUE,all.y=TRUE)
+# 
+# #remove 
+# #reorder
+# cellprops2_3<-cellprops2_2[which(!is.na(cellprops2_2$sample_name)),]
+# cellprops2_3$comboname<-paste(cellprops2_3$class,cellprops2_3$sex,sep=".")
+# cellprops2<-cellprops2_3[match(pd2$sample_name,cellprops2_3$sample_name),]
+# cellprops2m<-as.matrix(cellprops2[,5:(ncol(cellprops2)-1)])
+# dimnames(cellprops2m)[[1]]<-cellprops2$comboname
+# 
+# MEs0=bwMEs
+# MEs = orderMEs(MEs0)
+# moduleCellCor = cor(MEs, cellprops2m, use = "p");
+# retain<-!apply(moduleCellCor,2,is.na)[1,]
+# moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+# 
+# moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+# moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+# #edges
+# write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor.csv",sep="")))
+# #edge annotation
+# write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor_qvalue.csv",sep="")))
+# #Will display correlations and their BH adjusted q-values
+# textMatrix = paste(signif(moduleCellCor, 2), "\n(",
+#                  signif(moduleCellQvalue, 1), ")", sep = "");
+# dim(textMatrix) = dim(moduleCellCor)
+# 
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
+# par(mar = c(6,10,3,2));par(mfrow=c(1,1))
+# # Display the correlation values within a heatmap plot
+# labeledHeatmap(Matrix = moduleCellCor[den,],
+#              xLabels = colnames(cellprops2m),
+#              yLabels = names(MEs)[den],
+#              ySymbols = names(MEs)[den],
+#              colorLabels = FALSE,
+#              colors = blueWhiteRed(50),
+#              textMatrix = textMatrix[den,],
+#              setStdMargins = FALSE,
+#              cex.text = 0.9,
+#              zlim = c(-1,1),
+#              main = paste("ME-celltype correlation"))
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# 
+# # clustered version, with NA columns removed
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_clust.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
+# par(mar = c(2,2,2,5));par(cex.main=.5);
+# heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main="Clustered module-cell relationships",mar=c(5,1),cexRow=.8,cexCol=.8)
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# 
+# #edgewise module cell associations
+# 
+# for (edge in 1:length(edges)){
+# nSamples=length(edges[[edge]])
+# 
+# #Correlate MEs and cellprops2m
+# narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
+# datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
+# moduleCellCor = cor(ME.edges[[edge]], cellprops2m[edges[[edge]],], use = "p");
+# retain<-!apply(moduleCellCor,2,is.na)[1,]
+# moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+# moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+# moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+# #edges
+# write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_edge",edge,".csv",sep="")))
+# #edge annotation
+# write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_qvalue_edge",edge,".csv",sep="")))
+# 
+# #Display correlation matrix
+# # Will display correlations and their BH-adjusted p-values
+# textMatrix = paste(signif(moduleCellCor, 2), "\n(",
+#                    signif(moduleCellQvalue, 1), ")", sep = "");
+# dim(textMatrix) = dim(moduleCellCor)
+# 
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_edge',edge,'.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
+# par(mar = c(8,10,2,3));par(mfrow=c(1,1))
+# # Display the correlation values within a heatmap plot
+# labeledHeatmap(Matrix = moduleCellCor,
+#                xLabels = colnames(cellprops2m)[retain],
+#                yLabels = names(ME.edges[[edge]]),
+#                ySymbols = names(ME.edges[[edge]]),
+#                colorLabels = FALSE,
+#                colors = blueWhiteRed(50),
+#                textMatrix = textMatrix,
+#                setStdMargins = FALSE,
+#                cex.text = 0.9,
+#                zlim = c(-1,1),
+#                main = paste("ME-celltype correlation",names(edges)[edge],"with",datapoints,"datapoints"))
+# par(parbackup)
+# figure<-figure+1
+# dev.off()
+# 
+# # clustered version, with NA columns removed
+# 
+# par(mar = c(2,2,2,5));par(cex.main=.5);
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_flowcellprop_correlation_edge_clust',edge,'.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
+# heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main=paste("Clustered module-Cell relationships",names(edges)[edge]),mar=c(5,1),cexRow=.8,cexCol=.8)
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# }
+# 
+# 
+# 
+# ##test ratio
+# #stats for comparisons (edge 5)
+# tests<-data.frame()
+# testsdata<-t(cellprops2m)
+# 
+# statlist<-list()
+# ratiolist<-list()
+# for (k in 1:nrow(testsdata)) {
+# 
+# statlist[[k]]<-
+#   wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
+# 
+# ratiolist[[k]]<-
+#   median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
+# 
+# }
+# tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# 
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(5,nrow(tests))
+# flowcellproptests.flat<-tests
+# write.csv(flowcellproptests.flat,file=file.path(dir.results,paste("FLOWStats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
+# 
+# 
+# 
+# #stats for comparisons 4 edges
+# tests<-data.frame()
+# 
+# testsdata<-t(cellprops2m)
+# for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
+# statlist<-list()
+# ratiolist<-list()
+# for (k in 1:nrow(testsdata)) {
+#   
+#   statlist[[k]]<-
+#     wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
+#   
+#   ratiolist[[k]]<-
+#     median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
+#   
+# }
+# tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# }
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(1:4,nrow(tests)/4)
+# flowcellproptests.edge<-tests
+# write.csv(flowcellproptests.edge,file=file.path(dir.results,paste("FLOW_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edge_wilcox.csv",sep="")))
+# 
+# #combine stats and save
+# flowcellproptests<-rbind(flowcellproptests.edge,flowcellproptests.flat)
+# write.csv(flowcellproptests,file=file.path(dir.results,paste("FLOW_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
+# 
+# ##end ratio
+# 
+# 
+# }#end if
 #11.c NETWORK 2c module cellprop (for which we have flow data)####
-if (dataset.variables[[i]]=="berry.test"){
-#NETWORK 2c raw data
-# Define numbers of genes and samples
-nGenes = ncol(datExpr);
-nSamples = nrow(datExpr);
-# Recalculate edgewise MEs with color labels and select those with flow info only
-MEs0=bwMEs
-MEs = orderMEs(MEs0)
-ME.edges.flow=list()
-for (edge in 1:length(edges)){
-  edgeset<-edges[[edge]]
-  flowset<-which(!is.na(cellprops2$Th))
-  edgeflow<-intersect(edgeset,flowset)
-  MEs0.edge = MEs[edgeflow,]
-  MEs.edge = orderMEs(MEs0.edge)
-  ME.edges.flow[[names(edges)[edge]]]<-MEs.edge
-}
-cellprops3<-t(as.matrix(coef(decdat1)))[which(!is.na(cellprops2$Th)),]
-
-#names(cellprops)<-rownames(decmat.red)
-MEs0=bwMEs[which(!is.na(cellprops2$Th)),]#all deconvolution results where flow data exists, regardless of edge
-MEs = orderMEs(MEs0)
-moduleCellCor = cor(MEs, cellprops3, use = "p");
-retain<-!apply(moduleCellCor,2,is.na)[1,]
-moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-
-moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-#edges
-write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_subset.csv",sep="")))
-#edge annotation
-write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_qvalue_subset.csv",sep="")))
-#Will display correlations and their BH adjusted q-values
-textMatrix = paste(signif(moduleCellCor, 2), "\n(",
-                 signif(moduleCellQvalue, 1), ")", sep = "");
-dim(textMatrix) = dim(moduleCellCor)
-
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_subset_correlation.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
-par(mar = c(6,10,3,2));par(mfrow=c(1,1))
-# Display the correlation values within a heatmap plot
-labeledHeatmap(Matrix = moduleCellCor[den,],
-             xLabels = colnames(cellprops),
-             yLabels = names(MEs)[den],
-             ySymbols = names(MEs)[den],
-             colorLabels = FALSE,
-             colors = blueWhiteRed(50),
-             textMatrix = textMatrix[den,],
-             setStdMargins = FALSE,
-             cex.text = 0.9,
-             zlim = c(-1,1),
-             main = paste("ME-celltype correlation"))
-par(parbackup)
-dev.off()
-figure<-figure+1
-
-# clustered version, with NA columns removed
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_subset_correlation_clust.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
-par(mar = c(2,2,2,5));par(cex.main=.5);
-heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main="Clustered module-cell relationships",mar=c(5,1),cexRow=.8,cexCol=.8)
-par(parbackup)
-dev.off()
-figure<-figure+1
-
-#edgewise module cell associations
-
-for (edge in 1:length(edges)){
-nSamples=length(edges[[edge]])
-
-#Correlate MEs and cellprops3
-datapoints<-nrow(cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],])
-
-moduleCellCor = cor(ME.edges.flow[[edge]],cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],], use = "p")
-retain<-!apply(moduleCellCor,2,is.na)[1,]
-moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-#edges
-write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_edge",edge,".csv",sep="")))
-#edge annotation
-write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_qvalue_edge",edge,".csv",sep="")))
-
-#Display correlation matrix
-# Will display correlations and their BH-adjusted p-values
-textMatrix = paste(signif(moduleCellCor, 2), "\n(",
-                   signif(moduleCellQvalue, 1), ")", sep = "");
-dim(textMatrix) = dim(moduleCellCor)
-
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_correlation_withflow_edge',edge,'.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
-par(mar = c(8,10,2,3));par(mfrow=c(1,1))
-# Display the correlation values within a heatmap plot
-labeledHeatmap(Matrix = moduleCellCor,
-               xLabels = colnames(cellprops3)[retain],
-               yLabels = names(ME.edges.flow[[edge]]),
-               ySymbols = names(ME.edges.flow[[edge]]),
-               colorLabels = FALSE,
-               colors = blueWhiteRed(50),
-               textMatrix = textMatrix,
-               setStdMargins = FALSE,
-               cex.text = 0.9,
-               zlim = c(-1,1),
-               main = paste("ME-celltype correlation",names(edges)[edge]))
-par(parbackup)
-figure<-figure+1
-dev.off()
-
-# clustered version, with NA columns removed
-
-par(mar = c(2,2,2,5));par(cex.main=.5);
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_withflow_correlation_edge_clust',edge,'.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
-heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main=paste("Clustered module-Cell_prop_flow relationships",names(edges)[edge]),mar=c(5,1),cexRow=.8,cexCol=.8)
-par(parbackup)
-dev.off()
-figure<-figure+1
-}
-
-##test ratio (original proportions form deconvolution)
-
-#data prep
-cellprops3.cat<-cellprops3[order(rownames(cellprops3)),]
-combosub<-cellprops2_3[which(cellprops2_3$sample_name%in%rownames(cellprops3)),]
-combosub<-combosub[order(combosub$sample_name),]
-rownames(cellprops3.cat)<-combosub$comboname
-testsdata<-t(cellprops3.cat)
-
-#stats for comparisons (edge 5)
-tests<-data.frame()
-
-
-statlist<-list()
-ratiolist<-list()
-
-for (k in 1:nrow(testsdata)) {
-  
-  statlist[[k]]<-
-    wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
-  
-  ratiolist[[k]]<-
-    median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
-  
-}
-tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(5,nrow(tests))
-cellprop_withflow_tests.flat<-tests
-write.csv(cellprop_withflow_tests.flat,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
-
-#stats for comparisons (edges 1-4)
-tests<-data.frame()
-
-
-for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
-statlist<-list()
-ratiolist<-list()
-for (k in 1:nrow(testsdata)) {
-  
-  statlist[[k]]<-
-    wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
-  
-  ratiolist[[k]]<-
-    median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
-  
-}
-tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-}
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(1:4,nrow(tests)/4)
-cellprop_withflow_tests.edge<-tests
-write.csv(cellprop_withflow_tests.edge,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edges_wilcox.csv",sep="")))
-
-#combine and save
-cellprop_withflow_tests<-rbind(cellprop_withflow_tests.edge,cellprop_withflow_tests.flat)
-write.csv(cellprop_withflow_tests,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
-
-
-##end ratio
-
-
-
-##test ratio (new proportions from deconvolution, where categories are combined to match flow categories) also known as network 2d
-
-#data prep
-cellprops3.cat<-cellprops3[order(rownames(cellprops3)),]
-combosub<-cellprops2_3[which(cellprops2_3$sample_name%in%rownames(cellprops3)),]
-combosub<-combosub[order(combosub$sample_name),]
-rownames(cellprops3.cat)<-combosub$comboname
-
-#new prop. matrix
-newCD4<-apply(cellprops3.cat[,1:2],1,sum)
-newCD8<-apply(cellprops3.cat[,3:4],1,sum)
-newB<-apply(cellprops3.cat[,5:10],1,sum)
-newNK<-apply(cellprops3.cat[,11:12],1,sum)
-newMono<-apply(cellprops3.cat[,13:14],1,sum)
-newDC<-apply(cellprops3.cat[,15:16],1,sum)
-newNeutro<-cellprops3.cat[,17]
-
-newprops<-cbind(newB,newDC,newMono,newNeutro,newNK,newCD4,newCD8)
-rownames(newprops)<-combosub$comboname
-testsdata<-t(newprops)
-
-#stats for comparisons (edge 5)
-tests<-data.frame()
-
-
-statlist<-list()
-ratiolist<-list()
-
-for (k in 1:nrow(testsdata)) {
-
-statlist[[k]]<-
-  wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
-
-ratiolist[[k]]<-
-  median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
-
-}
-tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(5,nrow(tests))
-cellprop_withflow_tests.flat.new<-tests
-write.csv(cellprop_withflow_tests.flat.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
-
-#stats for comparisons (edges 1-4)
-tests<-data.frame()
-
-
-for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
-statlist<-list()
-ratiolist<-list()
-for (k in 1:nrow(testsdata)) {
-  
-  statlist[[k]]<-
-    wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
-  
-  ratiolist[[k]]<-
-    median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
-  
-}
-tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
-}
-
-tests<-tests[with(tests,order(names)),]
-tests$edge<-rep(1:4,nrow(tests)/4)
-cellprop_withflow_tests.edge.new<-tests
-write.csv(cellprop_withflow_tests.edge.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edges_wilcox.csv",sep="")))
-
-#combine and save
-cellprop_withflow_tests.new<-rbind(cellprop_withflow_tests.edge.new,cellprop_withflow_tests.flat.new)
-write.csv(cellprop_withflow_tests.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
-
-
-##end ratio
-##end addiitonal test
-
-
-
-}#end ifNETWORK 2c: Quantifying module cell-proportion associations (limited to samples with flow) ####
+# if (dataset.variables[[i]]=="berry.test"){
+# #NETWORK 2c raw data
+# # Define numbers of genes and samples
+# nGenes = ncol(datExpr);
+# nSamples = nrow(datExpr);
+# # Recalculate edgewise MEs with color labels and select those with flow info only
+# MEs0=bwMEs
+# MEs = orderMEs(MEs0)
+# ME.edges.flow=list()
+# for (edge in 1:length(edges)){
+#   edgeset<-edges[[edge]]
+#   flowset<-which(!is.na(cellprops2$Th))
+#   edgeflow<-intersect(edgeset,flowset)
+#   MEs0.edge = MEs[edgeflow,]
+#   MEs.edge = orderMEs(MEs0.edge)
+#   ME.edges.flow[[names(edges)[edge]]]<-MEs.edge
+# }
+# cellprops3<-t(as.matrix(coef(decdat1)))[which(!is.na(cellprops2$Th)),]
+# 
+# #names(cellprops)<-rownames(decmat.red)
+# MEs0=bwMEs[which(!is.na(cellprops2$Th)),]#all deconvolution results where flow data exists, regardless of edge
+# MEs = orderMEs(MEs0)
+# moduleCellCor = cor(MEs, cellprops3, use = "p");
+# retain<-!apply(moduleCellCor,2,is.na)[1,]
+# moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+# 
+# moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+# moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+# #edges
+# write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_subset.csv",sep="")))
+# #edge annotation
+# write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCellCor_qvalue_subset.csv",sep="")))
+# #Will display correlations and their BH adjusted q-values
+# textMatrix = paste(signif(moduleCellCor, 2), "\n(",
+#                  signif(moduleCellQvalue, 1), ")", sep = "");
+# dim(textMatrix) = dim(moduleCellCor)
+# 
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_subset_correlation.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
+# par(mar = c(6,10,3,2));par(mfrow=c(1,1))
+# # Display the correlation values within a heatmap plot
+# labeledHeatmap(Matrix = moduleCellCor[den,],
+#              xLabels = colnames(cellprops),
+#              yLabels = names(MEs)[den],
+#              ySymbols = names(MEs)[den],
+#              colorLabels = FALSE,
+#              colors = blueWhiteRed(50),
+#              textMatrix = textMatrix[den,],
+#              setStdMargins = FALSE,
+#              cex.text = 0.9,
+#              zlim = c(-1,1),
+#              main = paste("ME-celltype correlation"))
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# 
+# # clustered version, with NA columns removed
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_subset_correlation_clust.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
+# par(mar = c(2,2,2,5));par(cex.main=.5);
+# heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main="Clustered module-cell relationships",mar=c(5,1),cexRow=.8,cexCol=.8)
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# 
+# #edgewise module cell associations
+# 
+# for (edge in 1:length(edges)){
+# nSamples=length(edges[[edge]])
+# 
+# #Correlate MEs and cellprops3
+# datapoints<-nrow(cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],])
+# 
+# moduleCellCor = cor(ME.edges.flow[[edge]],cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],], use = "p")
+# retain<-!apply(moduleCellCor,2,is.na)[1,]
+# moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+# moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+# moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+# #edges
+# write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_edge",edge,".csv",sep="")))
+# #edge annotation
+# write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_qvalue_edge",edge,".csv",sep="")))
+# 
+# #Display correlation matrix
+# # Will display correlations and their BH-adjusted p-values
+# textMatrix = paste(signif(moduleCellCor, 2), "\n(",
+#                    signif(moduleCellQvalue, 1), ")", sep = "");
+# dim(textMatrix) = dim(moduleCellCor)
+# 
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_correlation_withflow_edge',edge,'.pdf',sep=""),height=nrow(moduleCellCor)/2,width=ncol(moduleCellCor)*0.75) 
+# par(mar = c(8,10,2,3));par(mfrow=c(1,1))
+# # Display the correlation values within a heatmap plot
+# labeledHeatmap(Matrix = moduleCellCor,
+#                xLabels = colnames(cellprops3)[retain],
+#                yLabels = names(ME.edges.flow[[edge]]),
+#                ySymbols = names(ME.edges.flow[[edge]]),
+#                colorLabels = FALSE,
+#                colors = blueWhiteRed(50),
+#                textMatrix = textMatrix,
+#                setStdMargins = FALSE,
+#                cex.text = 0.9,
+#                zlim = c(-1,1),
+#                main = paste("ME-celltype correlation",names(edges)[edge]))
+# par(parbackup)
+# figure<-figure+1
+# dev.off()
+# 
+# # clustered version, with NA columns removed
+# 
+# par(mar = c(2,2,2,5));par(cex.main=.5);
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_ME_cellprop_withflow_correlation_edge_clust',edge,'.pdf',sep=""),height=pdf.options()$height*1,width=pdf.options()$width*1) 
+# heatmap(moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]],col=blueWhiteRed(50),main=paste("Clustered module-Cell_prop_flow relationships",names(edges)[edge]),mar=c(5,1),cexRow=.8,cexCol=.8)
+# par(parbackup)
+# dev.off()
+# figure<-figure+1
+# }
+# 
+# ##test ratio (original proportions form deconvolution)
+# 
+# #data prep
+# cellprops3.cat<-cellprops3[order(rownames(cellprops3)),]
+# combosub<-cellprops2_3[which(cellprops2_3$sample_name%in%rownames(cellprops3)),]
+# combosub<-combosub[order(combosub$sample_name),]
+# rownames(cellprops3.cat)<-combosub$comboname
+# testsdata<-t(cellprops3.cat)
+# 
+# #stats for comparisons (edge 5)
+# tests<-data.frame()
+# 
+# 
+# statlist<-list()
+# ratiolist<-list()
+# 
+# for (k in 1:nrow(testsdata)) {
+#   
+#   statlist[[k]]<-
+#     wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
+#   
+#   ratiolist[[k]]<-
+#     median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
+#   
+# }
+# tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# 
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(5,nrow(tests))
+# cellprop_withflow_tests.flat<-tests
+# write.csv(cellprop_withflow_tests.flat,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
+# 
+# #stats for comparisons (edges 1-4)
+# tests<-data.frame()
+# 
+# 
+# for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
+# statlist<-list()
+# ratiolist<-list()
+# for (k in 1:nrow(testsdata)) {
+#   
+#   statlist[[k]]<-
+#     wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
+#   
+#   ratiolist[[k]]<-
+#     median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
+#   
+# }
+# tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# }
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(1:4,nrow(tests)/4)
+# cellprop_withflow_tests.edge<-tests
+# write.csv(cellprop_withflow_tests.edge,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edges_wilcox.csv",sep="")))
+# 
+# #combine and save
+# cellprop_withflow_tests<-rbind(cellprop_withflow_tests.edge,cellprop_withflow_tests.flat)
+# write.csv(cellprop_withflow_tests,file=file.path(dir.results,paste("cellprop_with_flow_Stats_",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
+# 
+# 
+# ##end ratio
+# 
+# 
+# 
+# ##test ratio (new proportions from deconvolution, where categories are combined to match flow categories) also known as network 2d
+# 
+# #data prep
+# cellprops3.cat<-cellprops3[order(rownames(cellprops3)),]
+# combosub<-cellprops2_3[which(cellprops2_3$sample_name%in%rownames(cellprops3)),]
+# combosub<-combosub[order(combosub$sample_name),]
+# rownames(cellprops3.cat)<-combosub$comboname
+# 
+# #new prop. matrix
+# newCD4<-apply(cellprops3.cat[,1:2],1,sum)
+# newCD8<-apply(cellprops3.cat[,3:4],1,sum)
+# newB<-apply(cellprops3.cat[,5:10],1,sum)
+# newNK<-apply(cellprops3.cat[,11:12],1,sum)
+# newMono<-apply(cellprops3.cat[,13:14],1,sum)
+# newDC<-apply(cellprops3.cat[,15:16],1,sum)
+# newNeutro<-cellprops3.cat[,17]
+# 
+# newprops<-cbind(newB,newDC,newMono,newNeutro,newNK,newCD4,newCD8)
+# rownames(newprops)<-combosub$comboname
+# testsdata<-t(newprops)
+# 
+# #stats for comparisons (edge 5)
+# tests<-data.frame()
+# 
+# 
+# statlist<-list()
+# ratiolist<-list()
+# 
+# for (k in 1:nrow(testsdata)) {
+# 
+# statlist[[k]]<-
+#   wilcox.test(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]],testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]])$p.value
+# 
+# ratiolist[[k]]<-
+#   median(na.omit(testsdata[k,colnames(testsdata)==levs[3]|colnames(testsdata)==levs[4]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[1]|colnames(testsdata)==levs[2]]))
+# 
+# }
+# tests<-rbind(tests,data.frame("type"="flat","names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(decmat.red),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(5,nrow(tests))
+# cellprop_withflow_tests.flat.new<-tests
+# write.csv(cellprop_withflow_tests.flat.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW_",q.i,".",an.count,".",i,"by_",contrast.variable1,"_flat_wilcox.csv",sep="")))
+# 
+# #stats for comparisons (edges 1-4)
+# tests<-data.frame()
+# 
+# 
+# for (the in list(c(3,1),c(4,2),c(2,1),c(4,3))){
+# statlist<-list()
+# ratiolist<-list()
+# for (k in 1:nrow(testsdata)) {
+#   
+#   statlist[[k]]<-
+#     wilcox.test(testsdata[k,colnames(testsdata)==levs[the[[1]]]],testsdata[k,colnames(testsdata)==levs[the[[2]]]])$p.value
+#   
+#   ratiolist[[k]]<-
+#     median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[1]]]]))/median(na.omit(testsdata[k,colnames(testsdata)==levs[the[[2]]]]))
+#   
+# }
+# tests<-rbind(tests,data.frame("type"=paste(as.character(the),collapse="."),"names"=rownames(testsdata),"ratio"=as.vector(unlist(ratiolist)),"pval"=as.vector(unlist(statlist)),"man_B"=as.vector(unlist(statlist))*nrow(testsdata),"bonf"=p.adjust(as.vector(unlist(statlist)),method="bonferroni"),"BH"=p.adjust(as.vector(unlist(statlist)),method="BH")))
+# }
+# 
+# tests<-tests[with(tests,order(names)),]
+# tests$edge<-rep(1:4,nrow(tests)/4)
+# cellprop_withflow_tests.edge.new<-tests
+# write.csv(cellprop_withflow_tests.edge.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_edges_wilcox.csv",sep="")))
+# 
+# #combine and save
+# cellprop_withflow_tests.new<-rbind(cellprop_withflow_tests.edge.new,cellprop_withflow_tests.flat.new)
+# write.csv(cellprop_withflow_tests.new,file=file.path(dir.results,paste("cellprop_with_flow_Stats_NEW",q.i,'.',an.count,'.',i,"by_",contrast.variable1,"_wilcox.csv",sep="")))
+# 
+# 
+# ##end ratio
+# ##end addiitonal test
+# 
+# 
+# 
+# }#end ifNETWORK 2c: Quantifying module cell-proportion associations (limited to samples with flow) ####
 #12. GS/MM Gene relationship to trait and important modules: Gene Significance and Module Membership####
 
 #version 1: by contrast (other version would be by edge)
@@ -3498,39 +3601,56 @@ write.csv(sigenrichnorm,file=file.path(dir.results,paste('table',q.i,'.',an.coun
 #Move sigenrich properties to Neo4j
 if (neoinsert=="on"){
 
-  nodes<-RNeo4j::nodes
+  #nodes<-RNeo4j::nodes
   #network-specific cypher query
   graphdata=sigenrichnorm
   #query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.sigenrich = ",modsig, " ON MATCH SET wmod.sigenrich = ",modsig,sep="")
-    t = suppressMessages(newTransaction(graph))
+    #t = suppressMessages(newTransaction(graph))
+  squareg = dataset.variables[[1]]
+  edgeg = edge
+  contrastvarsg = contrastvars[[edge]]
+  contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+  colnames(graphdata)<-c("wgcnamod","modsig")
+  
+  write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+  
+  query = paste(
+          "USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+          MERGE (wmod:wgcna {name:csvLine.wgcnamod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+          ON CREATE SET wmod.sigenrich = csvLine.modsig ON MATCH SET wmod.sigenrich = csvLine.modsig",sep="",collapse="")
+  
+  cypher(graph, query)
+  
+    # for (therow in 1:nrow(graphdata)) { #already in edgewise loop!
+    #   wgcnamod = as.character(graphdata[therow, ]$module)
+    #   #modsig = as.numeric(as.character(graphdata[therow, ]$ratio_sig))        
+    #   modsig = as.character(graphdata[therow, ]$ratio_sig)
+    #   
+    #   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.sigenrich = ",modsig, " ON MATCH SET wmod.sigenrich = ",modsig,sep="",collapse="")
+    #   cypher(graph,query)
+    #   
+    #   # suppressMessages(appendCypher(t, 
+    #   #              query,
+    #   #              wgcnamod = the_wmod,
+    #   #              #modsig = the_modsig,
+    #   #              #invariant node properties
+    #   #              squareg = dataset.variables[[1]],
+    #   #              edgeg = edge,
+    #   #              contrastvarsg = contrastvars[[edge]],
+    #   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])                    
+    #   #              
+    #   # ))
+    # }
     
-    for (therow in 1:nrow(graphdata)) { #already in edgewise loop!
-      the_wmod = as.character(graphdata[therow, ]$module)
-      #modsig = as.numeric(as.character(graphdata[therow, ]$ratio_sig))        
-      modsig = as.character(graphdata[therow, ]$ratio_sig)
-      query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.sigenrich = ",modsig, " ON MATCH SET wmod.sigenrich = ",modsig,sep="")
-      
-      suppressMessages(appendCypher(t, 
-                   query,
-                   wgcnamod = the_wmod,
-                   #modsig = the_modsig,
-                   #invariant node properties
-                   squareg = dataset.variables[[1]],
-                   edgeg = edge,
-                   contrastvarsg = contrastvars[[edge]],
-                   contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])                    
-                   
-      ))
-    }
-    
-    print("committing :)")
-    suppressMessages(commit(t))
+    #print("committing :)")
+    #suppressMessages(commit(t))
  
   #END NEO4J
   
 }#end neoinsert if
 
 }#close edgewise sigenrich
+
 #15. Output gene lists for use with online software and services.####
 #superseded by neo4j
 
@@ -3923,7 +4043,7 @@ for (colour in as.character(unique(geneInfo$moduleColor))){
 mgr<-as.character(geneInfo$EntrezID[geneInfo$moduleColor==colour])
 mgr2<-mgr[mgr!="NA"]
 mgr3<-mgr2[!is.na(mgr2)]
-moduleList[[colour]]<-mgr3
+moduleList[[colour]]<-unique(mgr3)
 }
 
 #For the following, need to also generate gene lists for the results.
@@ -3932,12 +4052,17 @@ moduleList[[colour]]<-mgr3
 res<-"fail"
 try(res <- compareCluster(moduleList, fun = "enrichPathway"))
 if (class(res)!="character"){
-resplot<-dotplot(res)
+  resplot<-"fail"
+
+try(resplot<-dotplot(res))
+  if (resplot!="fail"){
 resplot2<-resplot+theme(axis.text.x = element_text(angle = 270, hjust = 0))
 pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_Module clusters Reactome.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*2.5)
 print(resplot2)
 dev.off()
-figure<-figure+1}
+figure<-figure+1
+}#inner if
+}#outer if
 
 #KEGG pathway enrichment
 res2<-"fail"
@@ -4168,45 +4293,67 @@ for (edge in 1:5){
 
 if (neoinsert=="on"){
 
-nodes<-RNeo4j::nodes
+#nodes<-RNeo4j::nodes
 #network-specific cypher query
 graphdata=modules.as.classifier
+graphdata<-rownames_to_column(graphdata, var = "wgcnamod")
 
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste(
+  
+  "USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+  MERGE (wmod:wgcna {name:csvLine.wgcnamod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+  ON MATCH SET wmod.modAUC1 = csvLine.modAUC1, wmod.modAUC2 = csvLine.modAUC2, wmod.logit_est1 = csvLine.logit_est1, wmod.logit_est2 = csvLine.logit_est2,
+   wmod.AIC1 = csvLine.AIC1, wmod.AIC2 = csvLine.AIC2, wmod.P_1 = csvLine.P_1, wmod.P_2 = csvLine.P_2 
+  ON CREATE SET wmod.modAUC1 = csvLine.modAUC1, wmod.modAUC2 = csvLine.modAUC2, wmod.logit_est1 = csvLine.logit_est1, wmod.logit_est2 = csvLine.logit_est2,
+  wmod.AIC1 = csvLine.AIC1, wmod.AIC2 = csvLine.AIC2, wmod.P_1 = csvLine.P_1, wmod.P_2 = csvLine.P_2",sep="",collapse="")
+
+cypher(graph,query)
 
 #query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON MATCH SET wmod.modAUC1 = ",modAUC1,", wmod.modAUC2 = ",modAUC2, " ON CREATE SET wmod.modAUC1 = ",modAUC1, ",wmod.modAUC2 = ",modAUC2,sep="")
-t = suppressMessages(newTransaction(graph))
+#t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) { 
-  wmod = rownames(graphdata)[therow]
-  modAUC1 = graphdata[therow, ]$modAUC1
-  modAUC2 = graphdata[therow, ]$modAUC2
-  #new params:
-  logit_est1 = graphdata[therow, ]$logit_est1
-  logit_est2 = graphdata[therow, ]$logit_est2
-  AIC1 = graphdata[therow, ]$AIC1
-  AIC2 = graphdata[therow, ]$AIC2
-  P_1 = graphdata[therow, ]$P_1
-  P_2 = graphdata[therow, ]$P_2
-    
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON MATCH SET wmod.modAUC1 = ",modAUC1,", wmod.modAUC2 = ",modAUC2,", wmod.logit_est1 = ",logit_est1,", wmod.logit_est2 = ",logit_est2,", wmod.AIC1 = ",AIC1,", wmod.AIC2 = ",AIC2,", wmod.P_1 = ",P_1,", wmod.P_2 = ",P_2," ON CREATE SET wmod.modAUC1 = ",modAUC1, ", wmod.modAUC2 = ",modAUC2,", wmod.logit_est1 = ",logit_est1,", wmod.logit_est2 = ",logit_est2,", wmod.AIC1 = ",AIC1,", wmod.AIC2 = ",AIC2,", wmod.P_1 = ",P_1,", wmod.P_2 = ",P_2,sep="")
-  print(query)
-  suppressMessages(appendCypher(t, 
-               query, 
-               wgcnamod = wmod,
-               #modAUC1 = graphdata[therow, ]$list1,
-               #modAUC2 = graphdata[therow, ]$list2,
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
-               
-               
-  ))
-}
+# for (therow in 1:nrow(graphdata)) { 
+#   wgcnamod = rownames(graphdata)[therow]
+#   modAUC1 = graphdata[therow, ]$modAUC1
+#   modAUC2 = graphdata[therow, ]$modAUC2
+#   #new params:
+#   logit_est1 = graphdata[therow, ]$logit_est1
+#   logit_est2 = graphdata[therow, ]$logit_est2
+#   AIC1 = graphdata[therow, ]$AIC1
+#   AIC2 = graphdata[therow, ]$AIC2
+#   P_1 = graphdata[therow, ]$P_1
+#   P_2 = graphdata[therow, ]$P_2
+#   squareg = dataset.variables[[1]]
+#   edgeg = edge
+#   contrastvarsg = contrastvars[[edge]]
+#   contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+#     
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON MATCH SET wmod.modAUC1 = '",modAUC1,"', wmod.modAUC2 = '",modAUC2,"', wmod.logit_est1 = '",logit_est1,"', wmod.logit_est2 = '",logit_est2,"', wmod.AIC1 = '",AIC1,"', wmod.AIC2 = '",AIC2,"', wmod.P_1 = '",P_1,"', wmod.P_2 = '",P_2,"' ON CREATE SET wmod.modAUC1 = '",modAUC1, "', wmod.modAUC2 = '",modAUC2,"', wmod.logit_est1 = '",logit_est1,"', wmod.logit_est2 = '",logit_est2,"', wmod.AIC1 = '",AIC1,"', wmod.AIC2 = '",AIC2,"', wmod.P_1 = '",P_1,"', wmod.P_2 = '",P_2,"'",sep="",collapse="")
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              wgcnamod = wmod,
+#   #              #modAUC1 = graphdata[therow, ]$list1,
+#   #              #modAUC2 = graphdata[therow, ]$list2,
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+#   #              
+#   #              
+#   # ))
+# }
 
-print("committing :)")
-suppressMessages(commit(t))
+#print("committing :)")
+#suppressMessages(commit(t))
 
 #END NEO4J
 
@@ -4605,7 +4752,9 @@ rgenesE2<-rgenesE2[1:1000]#using all genes precipitates a bug in enrichPathway
 rpa<-NA
 rpa <- try(enrichPathway(unique(rgenesE2), organism="human",pvalueCutoff = 0.4,readable = T))
 #head(summary(rpa))
-summary(rpa)
+#summary(rpa)
+
+rpares<-as.data.frame(rpa)
 
 #catch error conditions (NULL and NA content fpr rpa) and export result. This is subtle, and distinguishes between NULL and NA conditions
 #edit: added another error condition: rpa may succeed, but summary(rpa) is empty, I have no idea why
@@ -4624,10 +4773,13 @@ pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'Set_',names(genes.fo
 dev.off()
 figure<-figure+1
 }#end if
-pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'Set_',names(genes.for.pathway.list)[geneset],'cnetplot.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1)
-cnetplot(rpa, categorySize = "pvalue")#, foldChange = fc) # no FC info
-dev.off()
-figure<-figure+1
+  
+  #The following breaks in R version 4
+# pdf(paste('fig_',q.i,'.',an.count,'.',figure,'_edge_',edge,'Set_',names(genes.for.pathway.list)[geneset],'cnetplot.pdf',sep=""),height=pdf.options()$height*1.3,width=pdf.options()$width*1)
+# cnetplot(rpa, categorySize = "pvalue")#, foldChange = fc) # no FC info
+# dev.off()
+# figure<-figure+1
+  
 } else {print(paste("no result for rpa: ",setnames[geneset]))}
 
 }#close geneset list
@@ -4636,6 +4788,8 @@ figure<-figure+1
 
 #end pathway analysis
   
+#HERE debug
+
 #7_CEGS modules********************************************####
 
 #CEGS: A.K.A. baylor
@@ -4922,7 +5076,7 @@ if (length(modEN)<300){#was 25
   }
   
   #add BH column
-}#end NETWORK 9 if statement
+}#end NETWORK 10 if statement
 #11. NETWORK 11: Baylor module-ImmunePW ######
 
 try(Baylor_immuneResults1<-userListEnrichment(geneR=modgenes2$Symbol,labelR=modgenes2$Module,nameOut=file.path(dir.results,"Baylor_ImmunePathwayEnrichment1.csv"),omitCategories="grey",useImmunePathwayLists=TRUE,outputCorrectedPvalues=TRUE))
@@ -5187,7 +5341,7 @@ summary(gD)
 #NETWORK 1 neo4j####
 if (neoinsert=="on"){
 #redefine nodes here so that RNeo4j works
-nodes<-RNeo4j::nodes
+#nodes<-RNeo4j::nodes
 
 #get the dataframe to use for relationships and nodes
 graphdata<-dataSet
@@ -5197,30 +5351,49 @@ graphdata<-dataSet
 # MERGE (phen:pheno {name:{pheno},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}})
 # CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(phen)
 # "
-t = suppressMessages(newTransaction(graph))
+#t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  phen = as.character(graphdata[therow, ]$pheno)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (phen:pheno {name:{pheno},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}})  CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(phen)",sep="")
-  
-  suppressMessages(appendCypher(t, 
-               query, 
-               wgcnamod = wmod, 
-               pheno = phen,
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-               rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
 
-suppressMessages(commit(t))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (phen:pheno {name:csvLine.pheno,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'})  
+              CREATE (wmod)-[:correlates {weight:csvLine.weight,qvalue:csvLine.qvalue,Rsq:csvLine.R_sq,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(phen)",sep="",collapse="")
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   pheno = as.character(graphdata[therow, ]$pheno)
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   weightg = as.numeric(as.character(graphdata[therow,]$weight))
+#   rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = '",diffMEg,"' ON MATCH SET wmod.diffME = '",diffMEg,"' MERGE (phen:pheno {name:'",pheno,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'})  CREATE (wmod)-[:correlates {weight:'",weightg,"',qvalue:'",qval,"',Rsq:'",rsqg,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(phen)",sep="",collapse="")
+#   cypher(graph,query)
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              wgcnamod = wmod, 
+#   #              pheno = phen,
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              weightg = as.numeric(as.character(graphdata[therow,]$weight)),
+#   #              rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -5484,7 +5657,7 @@ summary(gD2)
 if (neoinsert=="on"){
 #get the dataframe to use for relationships and nodes
 graphdata=dataSet
-t = suppressMessages(newTransaction(graph))
+#t = suppressMessages(newTransaction(graph))
 
 #remove rows where ratio or p-value are NA or infinite; these are at best hard to interpret, but more likely meaningless results. The full results are still in the exported csv
 
@@ -5492,61 +5665,54 @@ cellproptests<-cellproptests[!is.na(cellproptests$ratio),]
 cellproptests<-cellproptests[!is.na(cellproptests$pval),]
 cellproptests<-cellproptests[cellproptests$ratio!=Inf,]
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  cp = as.character(graphdata[therow, ]$cell)
-  
-  #data for some cell types may have been removed above! Some of these reults will be empty.
-    ratioX = as.numeric(as.character(cellproptests[which(cellproptests$names==cp&cellproptests$edge==edge),]$ratio))
+
+
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+
+graphdata$ratioX<-rep(NA,nrow(graphdata))
+graphdata$diffPX<-rep(NA,nrow(graphdata))
+graphdata$diffQX<-rep(NA,nrow(graphdata))
+
+  for (row in 1:nrow(graphdata)){
+   
+  cp = as.character(graphdata$cell)[row]
+  #data for some cell types may have been removed above! Some of these results will be empty.
+  ratioX = as.numeric(as.character(cellproptests[which(cellproptests$names==cp&cellproptests$edge==edge),]$ratio))
   diffPX = as.numeric(as.character(cellproptests[which(cellproptests$names==cp&cellproptests$edge==edge),]$pval))
   diffQX = as.numeric(as.character(cellproptests[which(cellproptests$names==cp&cellproptests$edge==edge),]$BH))
- 
-  #code below only sets ratio, diffP and diffQ properties on cellprop nodes if the values exist. Correlation with cellprop is still included as result, even if ratio is absent or meaningless.
-  if (length(ratioX)==0|length(diffPX)==0|length(diffQX)==0){
-    diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-    query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellprop {name:{cellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-    #print(paste("case1",ratioX,diffPX,diffQX))
-    suppressMessages(appendCypher(t, 
-                 query, 
-                 #nodes
-                 wgcnamod = wmod, 
-                 cellprop = cp,
-                 #invariant node properties
-                 squareg = dataset.variables[[1]],
-                 edgeg = edge,
-                 contrastvarsg = contrastvars[[edge]],
-                 contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-                 qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-                 weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-                 rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
-                 #                ratiog = ratioX,
-                 #                diffPg = diffPX,
-                 #                diffQg = diffQX
-    ))
-  }else{
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellprop {name:{cellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},ratio:{ratiog},diffP:{diffPg},diffQ:{diffQg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-  #print(paste("case2",ratioX,diffPX,diffQX))
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               wgcnamod = wmod, 
-               cellprop = cp,
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-               rsqg = as.numeric(as.character(graphdata[therow,]$R_sq)),
-               ratiog = ratioX,
-               diffPg = diffPX,
-               diffQg = diffQX
-  ))
-}
-}
-suppressMessages(commit(t))
+  if(length(ratioX)>0){graphdata$ratioX[row]<-ratioX}
+  if(length(diffPX)>0){graphdata$diffPX[row]<-diffPX}
+  if(length(diffQX)>0){graphdata$diffQX[row]<-diffQX}
+    }
+
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine with csvLine where csvLine.ratioX is not null
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (cp:cellprop {name:csvLine.cell,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',ratio:csvLine.ratioX,diffP:csvLine.diffPX,diffQ:csvLine.diffQX}) 
+              CREATE (wmod)-[:correlates {weight:csvLine.weight,qvalue:csvLine.qvalue,Rsq:csvLine.R_sq,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cp)",sep="",collapse="")
+cypher(graph,query)
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine with csvLine where csvLine.ratioX is null
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (cp:cellprop {name:csvLine.cell,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              CREATE (wmod)-[:correlates {weight:csvLine.weight,qvalue:csvLine.qvalue,Rsq:csvLine.R_sq,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cp)",sep="",collapse="")
+cypher(graph,query)
+
+
+# { #not sure
+# 
+# }#not sure
+# }#not sure
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -5617,595 +5783,599 @@ setEdgeColorRule(gDCW2, edge.attribute.name='weight', control.points,edge.colors
 redraw (gDCW2)
 }#end optional cytoscape
 
-#NETWORK 2b conditional####
-if (dataset.variables=='berry.test'){
-#NETWORK 2b prep####
-  #calc datapoints for the edge
-  narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
-  datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
-  #Only add correlations where we are reasonably certain, i.e. at least 5 datapoints for the correlation
-  if(datapoints>5){
-#NETWORK 2b helper####
-nSamples=length(edges[[edge]])
-
-#Correlate MEs and cellprops2m (this is now the same as in WGCNA section)
-narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
-datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
-moduleCellCor = cor(ME.edges[[edge]], cellprops2m[edges[[edge]],], use = "p");
-retain<-!apply(moduleCellCor,2,is.na)[1,]
-moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-#edges
-write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor_edge",edge,".csv",sep="")))
-
-r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
-s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
-r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
-s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
-r2[r2>0.05]<-1
-r2[r2<0.05]<-2
-r3<-r2-1
-s2[r3==0]<-0
-
-edgelist2<-list()
-count<-0
-for (ix in 1:nrow(s2)){
-  for (j in 1:ncol(s2)){
-    if (s2[ix,j]!=0){
-      count=count+1
-      res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
-      edgelist2[[count]]<-res
-    }
-    
-  }
-}
-
-if(length(edgelist2)==0){
-  r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
-  s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
-  r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
-  s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
-  r2[r2>0.25]<-1
-  r2[r2<0.25]<-2
-  r3<-r2-1
-  s2[r3==0]<-0
-  edgelist2<-list()
-  count<-0
-  for (ix in 1:nrow(s2)){
-    for (j in 1:ncol(s2)){
-      if (s2[ix,j]!=0){
-        count=count+1
-        res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
-        edgelist2[[count]]<-res
-      }
-      
-    }
-  }  
-  
-}
-
-edgemm2<-t(matrix(unlist(edgelist2),nrow=4))
-colnames(edgemm2)<-c("module","flowcell","weight","qvalue")
-newmod2<-apply(edgemm2,1,function(x){x[1]<-substr(x[1],3,nchar(x[1]))})
-edgemm2[,1]<-newmod2
-write.csv(edgemm2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"module_flow_cellprop.csv",sep="")))
-
-cells<-unique(edgemm2[,2])
-cells2<-cbind(cells,rep("flow_cell_prop",length(cells)))
-colnames(cells2)<-c("flow_cell_prop","kind")
-write.csv(cells2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"node_flow_cellprop.csv",sep="")))
-
-#END NETWORK 2 helper
-
-print("igraph 2")
-#NETWORK 2b igraph####
-
-#BEGIN igraph 2
-
-# Read a data set. 
-# Data format: dataframe with 3 variables; variables 1 & 2 correspond to interactions; variable 3 corresponds to the weight of interaction
-dataSet0 <- data.frame(edgemm2)
-dataSet0<-merge(dataSet0,diffMEmatrix[,edge], by.x="module",by.y="row.names",all.x=T,all.y=F)
-dataSet0<-transform(dataSet0,weight=as.numeric(as.character(weight)))
-colnames(dataSet0)<-c("module","flowcell","weight","qvalue","diffME")
-dataSet<-cbind(dataSet0,abs(dataSet0$weight)^2)
-colnames(dataSet)<-c("module","flowcell","weight","qvalue","diffME","R_sq")
-modulesInSet<-levels(as.factor(dataSet$module))
-cellsInSet<-levels(as.factor(dataSet$flowcell))
-# Create a graph. Use simplify to ensure that there are no duplicated edges or self loops
-gD2b <- graph.data.frame(dataSet[,c(1,2,3,4,6)], directed=FALSE)
-
-# Print number of nodes and edges
-vcount(gD2b)
-ecount(gD2b)
+#begin optional and conditional networks
+# - decide whether to keep this at all in build code. This code exists for a single edge case not used in any analysis. 
+# #NETWORK 2b conditional####
+# if (dataset.variables=='berry.test'){
+# #NETWORK 2b prep####
+#   #calc datapoints for the edge
+#   narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
+#   datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
+#   #Only add correlations where we are reasonably certain, i.e. at least 5 datapoints for the correlation
+#   if(datapoints>5){
+# #NETWORK 2b helper####
+# nSamples=length(edges[[edge]])
 # 
-# # Calculate some node properties and node similarities that will be used to illustrate 
-# # different plotting abilities
+# #Correlate MEs and cellprops2m (this is now the same as in WGCNA section)
+# narow<-!apply(cellprops2m[edges[[edge]],],2,is.na)[,1]
+# datapoints<-nrow(cellprops2m[edges[[edge]],][narow,])
+# moduleCellCor = cor(ME.edges[[edge]], cellprops2m[edges[[edge]],], use = "p");
+# retain<-!apply(moduleCellCor,2,is.na)[1,]
+# moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+# moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+# moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+# #edges
+# write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleFlowCellCor_edge",edge,".csv",sep="")))
 # 
-# # Calculate degree for all nodes
-# degAll <- degree(gD2, v = V(gD2), mode = "all")
+# r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
+# s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
+# r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
+# s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
+# r2[r2>0.05]<-1
+# r2[r2<0.05]<-2
+# r3<-r2-1
+# s2[r3==0]<-0
 # 
-# # Calculate betweenness for all nodes
-# betAll <- betweenness(gD2, v = V(gD2), directed = FALSE,weights=dataSet$R_sq) / (((vcount(gD2) - 1) * (vcount(gD2)-2)) / 2)
-# betAll.norm <- (betAll - min(betAll))/(max(betAll) - min(betAll))
-# # rm(betAll)
+# edgelist2<-list()
+# count<-0
+# for (ix in 1:nrow(s2)){
+#   for (j in 1:ncol(s2)){
+#     if (s2[ix,j]!=0){
+#       count=count+1
+#       res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
+#       edgelist2[[count]]<-res
+#     }
+#     
+#   }
+# }
 # 
-# #Calculate Dice similarities between all pairs of nodes
-# #dsAll <- similarity.dice(gD, vids = V(gD), mode = "all")
+# if(length(edgelist2)==0){
+#   r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
+#   s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
+#   r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
+#   s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
+#   r2[r2>0.25]<-1
+#   r2[r2<0.25]<-2
+#   r3<-r2-1
+#   s2[r3==0]<-0
+#   edgelist2<-list()
+#   count<-0
+#   for (ix in 1:nrow(s2)){
+#     for (j in 1:ncol(s2)){
+#       if (s2[ix,j]!=0){
+#         count=count+1
+#         res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
+#         edgelist2[[count]]<-res
+#       }
+#       
+#     }
+#   }  
+#   
+# }
+# 
+# edgemm2<-t(matrix(unlist(edgelist2),nrow=4))
+# colnames(edgemm2)<-c("module","flowcell","weight","qvalue")
+# newmod2<-apply(edgemm2,1,function(x){x[1]<-substr(x[1],3,nchar(x[1]))})
+# edgemm2[,1]<-newmod2
+# write.csv(edgemm2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"module_flow_cellprop.csv",sep="")))
+# 
+# cells<-unique(edgemm2[,2])
+# cells2<-cbind(cells,rep("flow_cell_prop",length(cells)))
+# colnames(cells2)<-c("flow_cell_prop","kind")
+# write.csv(cells2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"node_flow_cellprop.csv",sep="")))
+# 
+# #END NETWORK 2 helper
+# 
+# print("igraph 2")
+# #NETWORK 2b igraph####
+# 
+# #BEGIN igraph 2
+# 
+# # Read a data set. 
+# # Data format: dataframe with 3 variables; variables 1 & 2 correspond to interactions; variable 3 corresponds to the weight of interaction
+# dataSet0 <- data.frame(edgemm2)
+# dataSet0<-merge(dataSet0,diffMEmatrix[,edge], by.x="module",by.y="row.names",all.x=T,all.y=F)
+# dataSet0<-transform(dataSet0,weight=as.numeric(as.character(weight)))
+# colnames(dataSet0)<-c("module","flowcell","weight","qvalue","diffME")
+# dataSet<-cbind(dataSet0,abs(dataSet0$weight)^2)
+# colnames(dataSet)<-c("module","flowcell","weight","qvalue","diffME","R_sq")
+# modulesInSet<-levels(as.factor(dataSet$module))
+# cellsInSet<-levels(as.factor(dataSet$flowcell))
+# # Create a graph. Use simplify to ensure that there are no duplicated edges or self loops
+# gD2b <- graph.data.frame(dataSet[,c(1,2,3,4,6)], directed=FALSE)
+# 
+# # Print number of nodes and edges
+# vcount(gD2b)
+# ecount(gD2b)
+# # 
+# # # Calculate some node properties and node similarities that will be used to illustrate 
+# # # different plotting abilities
+# # 
+# # # Calculate degree for all nodes
+# # degAll <- degree(gD2, v = V(gD2), mode = "all")
+# # 
+# # # Calculate betweenness for all nodes
+# # betAll <- betweenness(gD2, v = V(gD2), directed = FALSE,weights=dataSet$R_sq) / (((vcount(gD2) - 1) * (vcount(gD2)-2)) / 2)
+# # betAll.norm <- (betAll - min(betAll))/(max(betAll) - min(betAll))
+# # # rm(betAll)
+# # 
+# # #Calculate Dice similarities between all pairs of nodes
+# # #dsAll <- similarity.dice(gD, vids = V(gD), mode = "all")
+# 
+# # Add new node/edge attributes based on the calculated node properties/similarities
+# 
+# # gD2 <- set.vertex.attribute(gD2, "degree", index = V(gD2), value = degAll)
+# # gD2 <- set.vertex.attribute(gD2, "betweenness", index = V(gD2), value = betAll.norm)
+# V(gD2b)[modulesInSet]$kind="module"
+# V(gD2b)[cellsInSet]$kind="flowcell"
+# 
+# list.vertex.attributes(gD2b)
+# 
+# # Check the attributes
+# summary(gD2b)
+# 
+# #F1 <- function(x) {data.frame(similarity = dsAll[which(V(gD)$name == as.character(x$module)), which(V(gD)$name == as.character(x$pheno))])}
+# #dataSet.ext <- ddply(.data=dataSet, .variables=c("module", "pheno", "weight"), .fun=function(x) data.frame(F1(x)))
+# dataSet.ext<-dataSet
+# 
+# gD2b <- set.edge.attribute(gD2b, "weight", index = E(gD2b), value = 0.0)
+# gD2b <- set.edge.attribute(gD2b, "R_sq", index = E(gD2b), value = 0.0)
+# gD2b <- set.edge.attribute(gD2b, "qvalue", index = E(gD2b), value = 0.0)
+# #gD <- set.edge.attribute(gD, "similarity", index = E(gD), value = 0)
+# 
+# # The order of interactions in gD is not the same as it is in dataSet or as it is in the edge list,
+# # and for that reason these values cannot be assigned directly
+# 
+# E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$R_sq <- dataSet.ext$R_sq
+# E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$weight <- dataSet$weight
+# E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$qvalue <- as.numeric(as.character(dataSet$qvalue))
+# 
+# # Check the attributes
+# summary(gD2)
+# 
+# #END IGRAPH
+# #NETWORK 2b neo4j####
+# if (neoinsert=="on"){
+#   #get the dataframe to use for relationships and nodes
+#   graphdata=dataSet
+#   t = suppressMessages(newTransaction(graph))
+#   
+#   #remove rows where ratio or p-value are NA or infinite; these are at best hard to interpret, but more likely meaningless results. The full results are still in the exported csv
+#   flowcellproptests<-flowcellproptests[!is.na(flowcellproptests$ratio),]
+#   flowcellproptests<-flowcellproptests[!is.na(flowcellproptests$pval),]
+#   flowcellproptests<-flowcellproptests[flowcellproptests$ratio!=Inf,]
+#   
+#   for (therow in 1:nrow(graphdata)) {
+#     wmod = as.character(graphdata[therow, ]$module)
+#     cp = as.character(graphdata[therow, ]$flowcell)
+#     
+#     #data for some cell types may have been removed above! Some of these reults will be empty.
+#     ratioX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$ratio))
+#     diffPX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$pval))
+#     diffQX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$BH))
+#     
+#     #code below only sets ratio, diffP and diffQ properties on flowcellprop nodes if the values exist. Correlation with flowcellprop is still included as result, even if ratio is absent or meaningless.
+#     if (length(ratioX)==0|length(diffPX)==0|length(diffQX)==0){
+#       diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#       query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:flowcellprop {name:{flowcellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
+#       #print(paste("case1",ratioX,diffPX,diffQX))
+#       suppressMessages(appendCypher(t, 
+#                                     query, 
+#                                     #nodes
+#                                     wgcnamod = wmod, 
+#                                     flowcellprop = cp,
+#                                     #invariant node properties
+#                                     squareg = dataset.variables[[1]],
+#                                     edgeg = edge,
+#                                     contrastvarsg = contrastvars[[edge]],
+#                                     contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#                                     qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#                                     weightg = as.numeric(as.character(graphdata[therow,]$weight)),
+#                                     rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
+#                                     #                ratiog = ratioX,
+#                                     #                diffPg = diffPX,
+#                                     #                diffQg = diffQX
+#       ))
+#     }else{
+#       diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#       query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:flowcellprop {name:{flowcellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},ratio:{ratiog},diffP:{diffPg},diffQ:{diffQg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
+#       #print(paste("case2",ratioX,diffPX,diffQX))
+#       suppressMessages(appendCypher(t, 
+#                                     query, 
+#                                     #nodes
+#                                     wgcnamod = wmod, 
+#                                     flowcellprop = cp,
+#                                     #invariant node properties
+#                                     squareg = dataset.variables[[1]],
+#                                     edgeg = edge,
+#                                     contrastvarsg = contrastvars[[edge]],
+#                                     contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#                                     qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#                                     weightg = as.numeric(as.character(graphdata[therow,]$weight)),
+#                                     rsqg = as.numeric(as.character(graphdata[therow,]$R_sq)),
+#                                     ratiog = ratioX,
+#                                     diffPg = diffPX,
+#                                     diffQg = diffQX
+#       ))
+#     }
+#   }
+#   suppressMessages(commit(t))
+#   
+#   #END NEO4J
+# }#end neoinsert if
+# #NETWORK 2b graphNEL####
+# if(cytoscapelink == "on"){
+#   #open Cytoscape connection
+# gD2b.cyt <- igraph.to.graphNEL(gD2b)
+# 
+# # We have to create attributes for graphNEL
+# # We'll keep the same name, so the values are passed from igraph
+# # node attributes
+# # gD2.cyt <- initNodeAttribute(gD2.cyt, 'label', 'char', "x")
+# gD2b.cyt <- initNodeAttribute(gD2b.cyt, 'kind', 'char', "y")
+# # gD2.cyt <- initNodeAttribute(gD2.cyt, 'degree', 'numeric', 0) 
+# # gD2.cyt <- initNodeAttribute(gD2.cyt, 'betweenness', 'numeric', 0) 
+# gD2b.cyt <- initNodeAttribute (gD2b.cyt, "diffME", 'numeric', 0.0)
+# # edge attributes
+# gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "weight", 'numeric', 0)
+# gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "qvalue", 'numeric', 0)
+# #gD2.cyt <- initEdgeAttribute (gD2.cyt, "weight2", 'numeric', 0)
+# #gD.cyt <- initEdgeAttribute (gD.cyt, "similarity", 'numeric', 0)
+# gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "R_sq", 'numeric', 0.0)
+# gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "edgeType", "char", "undefined")
+# #NETWORK 2b RCytoscape####
+# 
+# 
+# # Now we can create a new graph window in cytoscape
+# # Be sure that CytoscapeRPC plugin is activated
+# gDCW2b <- new.CytoscapeWindow("NETWORK 2b", graph = gD2b.cyt, overwriteWindow = TRUE,host="192.168.65.2",rpcPort=9000)
+# 
+# ##Send diffME to Cytoscape
+# displayGraph(gDCW2b)
+# new.nodes<-intModules[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
+# new.diffME<-unlist(all.difflist.modules[[edge]])[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
+# 
+# setNodeAttributesDirect(gDCW2b,"diffME","numeric",new.nodes,new.diffME)
+# # getNodeAttribute(gDCW2,"salmon","diffME")
+# getAllNodeAttributes(gDCW2b)
+# getAllNodes(gDCW2b)
+# 
+# #Colour modules by up or down
+# control.points <- c (-1.0, 0.0, 1.0)
+# node.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
+# setNodeColorRule(gDCW2b, node.attribute.name='diffME', control.points,node.colors, mode='interpolate')
+# redraw (gDCW2b)
+# 
+# # # If you also want to choose a layout from R, a list  of available layouts can be accessed as follows:
+# # cy <- CytoscapeConnection(host="192.168.65.2",rpcPort=9000)
+# # hlp <-getLayoutNames(cy)
+# 
+# setLayoutProperties (gDCW2b, hlp[6], list (edge_attribute = 'R_sq'))
+# layoutNetwork(gDCW2b, hlp[6])
+# 
+# # Finally, we can define rules for node colors, node sizes, and edge colors
+# #pheno nodes are red
+# cellcol<-rgb(t(col2rgb(c("green"))),maxColorValue = 255)
+# setNodeColorDirect(gDCW2b,cells,cellcol)
+# 
+# lockNodeDimensions(gDCW2b,FALSE)
+# setNodeWidthDirect(gDCW2b, modules,60)
+# setNodeWidthDirect(gDCW2b, cells,50)
+# newlabelcol<-rgb(t(col2rgb(c("black"))),maxColorValue = 255)
+# setNodeLabelColorDirect(gDCW2b, cells, newlabelcol)
+# 
+# control.points <- c (-1.0, 0.0, 1.0)
+# edge.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
+# setEdgeColorRule(gDCW2b, edge.attribute.name='weight', control.points,edge.colors, mode='interpolate')
+# redraw (gDCW2b)
+# }#end optional cytoscape}
+# #End optional network####
+# }#end datapoints in flowcellprops if
+# }#end NETWORK 2b conditional
+# 
+# 
+# #NETWORK 2c conditional####
+# if (dataset.variables=='berry.test'){
+# #NETWORK 2c prep####
+# #NETWORK 2c helper####
+#  # Define numbers of genes and samples
+#   nGenes = ncol(datExpr);
+#   nSamples = nrow(datExpr);
+#   # Recalculate edgewise MEs with color labels and select those with flow info only
+#   MEs0=bwMEs
+#   MEs = orderMEs(MEs0)
+#   ME.edges.flow=list()
+#   for (tempedge in 1:length(edges)){
+#     edgeset<-edges[[tempedge]]
+#     flowset<-which(!is.na(cellprops2$Th))
+#     edgeflow<-intersect(edgeset,flowset)
+#     MEs0.edge = MEs[edgeflow,]
+#     MEs.edge = orderMEs(MEs0.edge)
+#     ME.edges.flow[[names(edges)[tempedge]]]<-MEs.edge
+#   }
+#   cellprops3<-t(as.matrix(coef(decdat1)))[which(!is.na(cellprops2$Th)),]
+#   
+#   nSamples=length(edges[[edge]])
+#   
+#   #Correlate MEs and cellprops3
+#   datapoints<-nrow(cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],])
+#   
+#   moduleCellCor = cor(ME.edges.flow[[edge]],cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],], use = "p")
+#   retain<-!apply(moduleCellCor,2,is.na)[1,]
+#   moduleCellCor = moduleCellCor[,retain] #NA columns removed!
+#   moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
+#   moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
+#   #edges
+#   write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_edge",edge,".csv",sep="")))
+#   #edge annotation
+#   write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_qvalue_edge",edge,".csv",sep="")))
+#   
+#     r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
+#     s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
+#     r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
+#     s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
+#     r2[r2>0.05]<-1
+#     r2[r2<0.05]<-2
+#     r3<-r2-1
+#     s2[r3==0]<-0
+#     
+#     edgelist2<-list()
+#     count<-0
+#     for (ix in 1:nrow(s2)){
+#       for (j in 1:ncol(s2)){
+#         if (s2[ix,j]!=0){
+#           count=count+1
+#           res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
+#           edgelist2[[count]]<-res
+#         }
+#         
+#       }
+#     }
+#     
+#     if(length(edgelist2)==0){
+#       r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
+#       s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
+#       r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
+#       s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
+#       r2[r2>0.25]<-1
+#       r2[r2<0.25]<-2
+#       r3<-r2-1
+#       s2[r3==0]<-0
+#       edgelist2<-list()
+#       count<-0
+#       for (ix in 1:nrow(s2)){
+#         for (j in 1:ncol(s2)){
+#           if (s2[ix,j]!=0){
+#             count=count+1
+#             res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
+#             edgelist2[[count]]<-res
+#           }
+#           
+#         }
+#       }  
+#       
+#     }
+#     
+#     edgemm2<-t(matrix(unlist(edgelist2),nrow=4))
+#     colnames(edgemm2)<-c("module","cellpropF","weight","qvalue")
+#     newmod2<-apply(edgemm2,1,function(x){x[1]<-substr(x[1],3,nchar(x[1]))})
+#     edgemm2[,1]<-newmod2
+#     write.csv(edgemm2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"module_flow_cellprop.csv",sep="")))
+#     
+#     cells<-unique(edgemm2[,2])
+#     cells2<-cbind(cells,rep("cellpropF",length(cells)))
+#     colnames(cells2)<-c("cellpropF","kind")
+#     write.csv(cells2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"node_flow_cellprop.csv",sep="")))
+#     
+#     #END NETWORK 2 helper
+#     
+#     print("igraph 2")
+# #NETWORK 2c igraph####
+#     
+#     #BEGIN igraph 2
+#     
+#     # Read a data set. 
+#     # Data format: dataframe with 3 variables; variables 1 & 2 correspond to interactions; variable 3 corresponds to the weight of interaction
+#     dataSet0 <- data.frame(edgemm2)
+#     dataSet0<-merge(dataSet0,diffMEmatrix[,edge], by.x="module",by.y="row.names",all.x=T,all.y=F)
+#     dataSet0<-transform(dataSet0,weight=as.numeric(as.character(weight)))
+#     colnames(dataSet0)<-c("module","cellpropF","weight","qvalue","diffME")
+#     dataSet<-cbind(dataSet0,abs(dataSet0$weight)^2)
+#     colnames(dataSet)<-c("module","cellpropF","weight","qvalue","diffME","R_sq")
+#     modulesInSet<-levels(as.factor(dataSet$module))
+#     cellsInSet<-levels(as.factor(dataSet$cellpropF))
+#     # Create a graph. Use simplify to ensure that there are no duplicated edges or self loops
+#     gD2c <- graph.data.frame(dataSet[,c(1,2,3,4,6)], directed=FALSE)
+#     
+#     # Print number of nodes and edges
+#     vcount(gD2c)
+#     ecount(gD2c)
+#     # 
+#     # # Calculate some node properties and node similarities that will be used to illustrate 
+#     # # different plotting abilities
+#     # 
+#     # # Calculate degree for all nodes
+#     # degAll <- degree(gD2, v = V(gD2), mode = "all")
+#     # 
+#     # # Calculate betweenness for all nodes
+#     # betAll <- betweenness(gD2, v = V(gD2), directed = FALSE,weights=dataSet$R_sq) / (((vcount(gD2) - 1) * (vcount(gD2)-2)) / 2)
+#     # betAll.norm <- (betAll - min(betAll))/(max(betAll) - min(betAll))
+#     # # rm(betAll)
+#     # 
+#     # #Calculate Dice similarities between all pairs of nodes
+#     # #dsAll <- similarity.dice(gD, vids = V(gD), mode = "all")
+#     
+#     # Add new node/edge attributes based on the calculated node properties/similarities
+#     
+#     # gD2 <- set.vertex.attribute(gD2, "degree", index = V(gD2), value = degAll)
+#     # gD2 <- set.vertex.attribute(gD2, "betweenness", index = V(gD2), value = betAll.norm)
+#     V(gD2c)[modulesInSet]$kind="module"
+#     V(gD2c)[cellsInSet]$kind="cellpropF"
+#     
+#     list.vertex.attributes(gD2c)
+#     
+#     # Check the attributes
+#     summary(gD2c)
+#     
+#     #F1 <- function(x) {data.frame(similarity = dsAll[which(V(gD)$name == as.character(x$module)), which(V(gD)$name == as.character(x$pheno))])}
+#     #dataSet.ext <- ddply(.data=dataSet, .variables=c("module", "pheno", "weight"), .fun=function(x) data.frame(F1(x)))
+#     dataSet.ext<-dataSet
+#     
+#     gD2c <- set.edge.attribute(gD2c, "weight", index = E(gD2c), value = 0.0)
+#     gD2c <- set.edge.attribute(gD2c, "R_sq", index = E(gD2c), value = 0.0)
+#     gD2c <- set.edge.attribute(gD2c, "qvalue", index = E(gD2c), value = 0.0)
+#     #gD <- set.edge.attribute(gD, "similarity", index = E(gD), value = 0)
+#     
+#     # The order of interactions in gD is not the same as it is in dataSet or as it is in the edge list,
+#     # and for that reason these values cannot be assigned directly
+#     
+#     E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$R_sq <- dataSet.ext$R_sq
+#     E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$weight <- dataSet$weight
+#     E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$qvalue <- as.numeric(as.character(dataSet$qvalue))
+#     
+#     # Check the attributes
+#     summary(gD2c)
+#     
+#     #END IGRAPH
+# #NETWORK 2c neo4j####
+#     if (neoinsert=="on"){
+#       #get the dataframe to use for relationships and nodes
+#       graphdata=dataSet
+#       t = suppressMessages(newTransaction(graph))
+#       
+#       #remove rows where ratio or p-value are NA or infinite; these are at best hard to interpret, but more likely meaningless results. The full results are still in the exported csv
+#       cellprop_withflow_tests<-cellprop_withflow_tests[!is.na(cellprop_withflow_tests$ratio),]
+#       cellprop_withflow_tests<-cellprop_withflow_tests[!is.na(cellprop_withflow_tests$pval),]
+#       cellprop_withflow_tests<-cellprop_withflow_tests[cellprop_withflow_tests$ratio!=Inf,]
+#       
+#       for (therow in 1:nrow(graphdata)) {
+#         wmod = as.character(graphdata[therow, ]$module)
+#         cp = as.character(graphdata[therow, ]$cellpropF)
+#         
+#         #data for some cell types may have been removed above! Some of these reults will be empty.
+#         ratioX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$ratio))
+#         diffPX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$pval))
+#         diffQX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$BH))
+#         
+#         #code below only sets ratio, diffP and diffQ properties on cellpropFprop nodes if the values exist. Correlation with cellpropFprop is still included as result, even if ratio is absent or meaningless.
+#         if (length(ratioX)==0|length(diffPX)==0|length(diffQX)==0){
+#           diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#           query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellpropFprop {name:{cellpropFprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
+#           #print(paste("case1",ratioX,diffPX,diffQX))
+#           suppressMessages(appendCypher(t, 
+#                                         query, 
+#                                         #nodes
+#                                         wgcnamod = wmod, 
+#                                         cellpropFprop = cp,
+#                                         #invariant node properties
+#                                         squareg = dataset.variables[[1]],
+#                                         edgeg = edge,
+#                                         contrastvarsg = contrastvars[[edge]],
+#                                         contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#                                         qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#                                         weightg = as.numeric(as.character(graphdata[therow,]$weight)),
+#                                         rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
+#                                         #                ratiog = ratioX,
+#                                         #                diffPg = diffPX,
+#                                         #                diffQg = diffQX
+#           ))
+#         }else{
+#           diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#           query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellpropFprop {name:{cellpropFprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},ratio:{ratiog},diffP:{diffPg},diffQ:{diffQg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
+#           #print(paste("case2",ratioX,diffPX,diffQX))
+#           suppressMessages(appendCypher(t, 
+#                                         query, 
+#                                         #nodes
+#                                         wgcnamod = wmod, 
+#                                         cellpropFprop = cp,
+#                                         #invariant node properties
+#                                         squareg = dataset.variables[[1]],
+#                                         edgeg = edge,
+#                                         contrastvarsg = contrastvars[[edge]],
+#                                         contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#                                         qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#                                         weightg = as.numeric(as.character(graphdata[therow,]$weight)),
+#                                         rsqg = as.numeric(as.character(graphdata[therow,]$R_sq)),
+#                                         ratiog = ratioX,
+#                                         diffPg = diffPX,
+#                                         diffQg = diffQX
+#           ))
+#         }
+#       }
+#       suppressMessages(commit(t))
+#       
+#       #END NEO4J
+#     }#end neoinsert if
+# #NETWORK 2c graphNEL####
+#     if(cytoscapelink == "on"){
+#       #open Cytoscape connection    
+#     gD2c.cyt <- igraph.to.graphNEL(gD2c)
+#     
+#     # We have to create attributes for graphNEL
+#     # We'll keep the same name, so the values are passed from igraph
+#     # node attributes
+#     # gD2.cyt <- initNodeAttribute(gD2.cyt, 'label', 'char', "x")
+#     gD2c.cyt <- initNodeAttribute(gD2c.cyt, 'kind', 'char', "y")
+#     # gD2.cyt <- initNodeAttribute(gD2.cyt, 'degree', 'numeric', 0) 
+#     # gD2.cyt <- initNodeAttribute(gD2.cyt, 'betweenness', 'numeric', 0) 
+#     gD2c.cyt <- initNodeAttribute (gD2c.cyt, "diffME", 'numeric', 0.0)
+#     # edge attributes
+#     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "weight", 'numeric', 0)
+#     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "qvalue", 'numeric', 0)
+#     #gD2.cyt <- initEdgeAttribute (gD2.cyt, "weight2", 'numeric', 0)
+#     #gD.cyt <- initEdgeAttribute (gD.cyt, "similarity", 'numeric', 0)
+#     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "R_sq", 'numeric', 0.0)
+#     gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "edgeType", "char", "undefined")
+# #NETWORK 2c RCytoscape####
+# 
+#     
+#     # Now we can create a new graph window in cytoscape
+#     # Be sure that CytoscapeRPC plugin is activated
+#     gDCW2c <- new.CytoscapeWindow("NETWORK 2c", graph = gD2c.cyt, overwriteWindow = TRUE,host="192.168.65.2",rpcPort=9000)
+#     
+#     ##Send diffME to Cytoscape
+#     displayGraph(gDCW2c)
+#     new.nodes<-intModules[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
+#     new.diffME<-unlist(all.difflist.modules[[edge]])[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
+#     
+#     setNodeAttributesDirect(gDCW2c,"diffME","numeric",new.nodes,new.diffME)
+#     # getNodeAttribute(gDCW2,"salmon","diffME")
+#     getAllNodeAttributes(gDCW2c)
+#     getAllNodes(gDCW2c)
+#     
+#     #Colour modules by up or down
+#     control.points <- c (-1.0, 0.0, 1.0)
+#     node.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
+#     setNodeColorRule(gDCW2c, node.attribute.name='diffME', control.points,node.colors, mode='interpolate')
+#     redraw (gDCW2c)
+#     
+#     # # If you also want to choose a layout from R, a list  of available layouts can be accessed as follows:
+#     # cy <- CytoscapeConnection(host="192.168.65.2",rpcPort=9000)
+#     # hlp <-getLayoutNames(cy)
+#     
+#     setLayoutProperties (gDCW2c, hlp[6], list (edge_attribute = 'R_sq'))
+#     layoutNetwork(gDCW2c, hlp[6])
+#     
+#     # Finally, we can define rules for node colors, node sizes, and edge colors
+#     #pheno nodes are red
+#     cellcol<-rgb(t(col2rgb(c("green"))),maxColorValue = 255)
+#     setNodeColorDirect (gDCW2c,cells,cellcol)
+#     
+#     lockNodeDimensions(gDCW2c,FALSE)
+#     setNodeWidthDirect(gDCW2c, modules,60)
+#     setNodeWidthDirect(gDCW2c, cells,50)
+#     newlabelcol<-rgb(t(col2rgb(c("black"))),maxColorValue = 255)
+#     setNodeLabelColorDirect(gDCW2c, cells, newlabelcol)
+#     
+#     control.points <- c (-1.0, 0.0, 1.0)
+#     edge.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
+#     setEdgeColorRule(gDCW2c, edge.attribute.name='weight', control.points,edge.colors, mode='interpolate')
+#     redraw (gDCW2c)
+#     #End optional network####
+#     }#end optional cytoscape
+# }#end NETWORK 2c conditional
 
-# Add new node/edge attributes based on the calculated node properties/similarities
-
-# gD2 <- set.vertex.attribute(gD2, "degree", index = V(gD2), value = degAll)
-# gD2 <- set.vertex.attribute(gD2, "betweenness", index = V(gD2), value = betAll.norm)
-V(gD2b)[modulesInSet]$kind="module"
-V(gD2b)[cellsInSet]$kind="flowcell"
-
-list.vertex.attributes(gD2b)
-
-# Check the attributes
-summary(gD2b)
-
-#F1 <- function(x) {data.frame(similarity = dsAll[which(V(gD)$name == as.character(x$module)), which(V(gD)$name == as.character(x$pheno))])}
-#dataSet.ext <- ddply(.data=dataSet, .variables=c("module", "pheno", "weight"), .fun=function(x) data.frame(F1(x)))
-dataSet.ext<-dataSet
-
-gD2b <- set.edge.attribute(gD2b, "weight", index = E(gD2b), value = 0.0)
-gD2b <- set.edge.attribute(gD2b, "R_sq", index = E(gD2b), value = 0.0)
-gD2b <- set.edge.attribute(gD2b, "qvalue", index = E(gD2b), value = 0.0)
-#gD <- set.edge.attribute(gD, "similarity", index = E(gD), value = 0)
-
-# The order of interactions in gD is not the same as it is in dataSet or as it is in the edge list,
-# and for that reason these values cannot be assigned directly
-
-E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$R_sq <- dataSet.ext$R_sq
-E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$weight <- dataSet$weight
-E(gD2b)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$flowcell)]$qvalue <- as.numeric(as.character(dataSet$qvalue))
-
-# Check the attributes
-summary(gD2)
-
-#END IGRAPH
-#NETWORK 2b neo4j####
-if (neoinsert=="on"){
-  #get the dataframe to use for relationships and nodes
-  graphdata=dataSet
-  t = suppressMessages(newTransaction(graph))
-  
-  #remove rows where ratio or p-value are NA or infinite; these are at best hard to interpret, but more likely meaningless results. The full results are still in the exported csv
-  flowcellproptests<-flowcellproptests[!is.na(flowcellproptests$ratio),]
-  flowcellproptests<-flowcellproptests[!is.na(flowcellproptests$pval),]
-  flowcellproptests<-flowcellproptests[flowcellproptests$ratio!=Inf,]
-  
-  for (therow in 1:nrow(graphdata)) {
-    wmod = as.character(graphdata[therow, ]$module)
-    cp = as.character(graphdata[therow, ]$flowcell)
-    
-    #data for some cell types may have been removed above! Some of these reults will be empty.
-    ratioX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$ratio))
-    diffPX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$pval))
-    diffQX = as.numeric(as.character(flowcellproptests[which(flowcellproptests$names==cp&flowcellproptests$edge==edge),]$BH))
-    
-    #code below only sets ratio, diffP and diffQ properties on flowcellprop nodes if the values exist. Correlation with flowcellprop is still included as result, even if ratio is absent or meaningless.
-    if (length(ratioX)==0|length(diffPX)==0|length(diffQX)==0){
-      diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-      query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:flowcellprop {name:{flowcellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-      #print(paste("case1",ratioX,diffPX,diffQX))
-      suppressMessages(appendCypher(t, 
-                                    query, 
-                                    #nodes
-                                    wgcnamod = wmod, 
-                                    flowcellprop = cp,
-                                    #invariant node properties
-                                    squareg = dataset.variables[[1]],
-                                    edgeg = edge,
-                                    contrastvarsg = contrastvars[[edge]],
-                                    contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-                                    qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-                                    weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-                                    rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
-                                    #                ratiog = ratioX,
-                                    #                diffPg = diffPX,
-                                    #                diffQg = diffQX
-      ))
-    }else{
-      diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-      query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:flowcellprop {name:{flowcellprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},ratio:{ratiog},diffP:{diffPg},diffQ:{diffQg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-      #print(paste("case2",ratioX,diffPX,diffQX))
-      suppressMessages(appendCypher(t, 
-                                    query, 
-                                    #nodes
-                                    wgcnamod = wmod, 
-                                    flowcellprop = cp,
-                                    #invariant node properties
-                                    squareg = dataset.variables[[1]],
-                                    edgeg = edge,
-                                    contrastvarsg = contrastvars[[edge]],
-                                    contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-                                    qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-                                    weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-                                    rsqg = as.numeric(as.character(graphdata[therow,]$R_sq)),
-                                    ratiog = ratioX,
-                                    diffPg = diffPX,
-                                    diffQg = diffQX
-      ))
-    }
-  }
-  suppressMessages(commit(t))
-  
-  #END NEO4J
-}#end neoinsert if
-#NETWORK 2b graphNEL####
-if(cytoscapelink == "on"){
-  #open Cytoscape connection
-gD2b.cyt <- igraph.to.graphNEL(gD2b)
-
-# We have to create attributes for graphNEL
-# We'll keep the same name, so the values are passed from igraph
-# node attributes
-# gD2.cyt <- initNodeAttribute(gD2.cyt, 'label', 'char', "x")
-gD2b.cyt <- initNodeAttribute(gD2b.cyt, 'kind', 'char', "y")
-# gD2.cyt <- initNodeAttribute(gD2.cyt, 'degree', 'numeric', 0) 
-# gD2.cyt <- initNodeAttribute(gD2.cyt, 'betweenness', 'numeric', 0) 
-gD2b.cyt <- initNodeAttribute (gD2b.cyt, "diffME", 'numeric', 0.0)
-# edge attributes
-gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "weight", 'numeric', 0)
-gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "qvalue", 'numeric', 0)
-#gD2.cyt <- initEdgeAttribute (gD2.cyt, "weight2", 'numeric', 0)
-#gD.cyt <- initEdgeAttribute (gD.cyt, "similarity", 'numeric', 0)
-gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "R_sq", 'numeric', 0.0)
-gD2b.cyt <- initEdgeAttribute (gD2b.cyt, "edgeType", "char", "undefined")
-#NETWORK 2b RCytoscape####
-
-
-# Now we can create a new graph window in cytoscape
-# Be sure that CytoscapeRPC plugin is activated
-gDCW2b <- new.CytoscapeWindow("NETWORK 2b", graph = gD2b.cyt, overwriteWindow = TRUE,host="192.168.65.2",rpcPort=9000)
-
-##Send diffME to Cytoscape
-displayGraph(gDCW2b)
-new.nodes<-intModules[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
-new.diffME<-unlist(all.difflist.modules[[edge]])[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
-
-setNodeAttributesDirect(gDCW2b,"diffME","numeric",new.nodes,new.diffME)
-# getNodeAttribute(gDCW2,"salmon","diffME")
-getAllNodeAttributes(gDCW2b)
-getAllNodes(gDCW2b)
-
-#Colour modules by up or down
-control.points <- c (-1.0, 0.0, 1.0)
-node.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
-setNodeColorRule(gDCW2b, node.attribute.name='diffME', control.points,node.colors, mode='interpolate')
-redraw (gDCW2b)
-
-# # If you also want to choose a layout from R, a list  of available layouts can be accessed as follows:
-# cy <- CytoscapeConnection(host="192.168.65.2",rpcPort=9000)
-# hlp <-getLayoutNames(cy)
-
-setLayoutProperties (gDCW2b, hlp[6], list (edge_attribute = 'R_sq'))
-layoutNetwork(gDCW2b, hlp[6])
-
-# Finally, we can define rules for node colors, node sizes, and edge colors
-#pheno nodes are red
-cellcol<-rgb(t(col2rgb(c("green"))),maxColorValue = 255)
-setNodeColorDirect(gDCW2b,cells,cellcol)
-
-lockNodeDimensions(gDCW2b,FALSE)
-setNodeWidthDirect(gDCW2b, modules,60)
-setNodeWidthDirect(gDCW2b, cells,50)
-newlabelcol<-rgb(t(col2rgb(c("black"))),maxColorValue = 255)
-setNodeLabelColorDirect(gDCW2b, cells, newlabelcol)
-
-control.points <- c (-1.0, 0.0, 1.0)
-edge.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
-setEdgeColorRule(gDCW2b, edge.attribute.name='weight', control.points,edge.colors, mode='interpolate')
-redraw (gDCW2b)
-}#end optional cytoscape}
-#End optional network####
-}#end datapoints in flowcellprops if
-}#end NETWORK 2b conditional
-
-
-#NETWORK 2c conditional####
-if (dataset.variables=='berry.test'){
-#NETWORK 2c prep####
-#NETWORK 2c helper####
- # Define numbers of genes and samples
-  nGenes = ncol(datExpr);
-  nSamples = nrow(datExpr);
-  # Recalculate edgewise MEs with color labels and select those with flow info only
-  MEs0=bwMEs
-  MEs = orderMEs(MEs0)
-  ME.edges.flow=list()
-  for (tempedge in 1:length(edges)){
-    edgeset<-edges[[tempedge]]
-    flowset<-which(!is.na(cellprops2$Th))
-    edgeflow<-intersect(edgeset,flowset)
-    MEs0.edge = MEs[edgeflow,]
-    MEs.edge = orderMEs(MEs0.edge)
-    ME.edges.flow[[names(edges)[tempedge]]]<-MEs.edge
-  }
-  cellprops3<-t(as.matrix(coef(decdat1)))[which(!is.na(cellprops2$Th)),]
-  
-  nSamples=length(edges[[edge]])
-  
-  #Correlate MEs and cellprops3
-  datapoints<-nrow(cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],])
-  
-  moduleCellCor = cor(ME.edges.flow[[edge]],cellprops3[which(!is.na(cellprops2$Th))%in%edges[[edge]],], use = "p")
-  retain<-!apply(moduleCellCor,2,is.na)[1,]
-  moduleCellCor = moduleCellCor[,retain] #NA columns removed!
-  moduleCellPvalue = corPvalueStudent(moduleCellCor, nSamples);
-  moduleCellQvalue = matrix(p.adjust(moduleCellPvalue,method="BH"),nrow=nrow(moduleCellPvalue),dimnames=list(row.names(moduleCellPvalue),colnames(moduleCellPvalue)))
-  #edges
-  write.csv(moduleCellCor,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(edges)[edge],".",names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_edge",edge,".csv",sep="")))
-  #edge annotation
-  write.csv(moduleCellQvalue,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,names(edges)[edge],".",'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"ModuleCell_withflow_Cor_qvalue_edge",edge,".csv",sep="")))
-  
-    r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
-    s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
-    r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
-    s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
-    r2[r2>0.05]<-1
-    r2[r2<0.05]<-2
-    r3<-r2-1
-    s2[r3==0]<-0
-    
-    edgelist2<-list()
-    count<-0
-    for (ix in 1:nrow(s2)){
-      for (j in 1:ncol(s2)){
-        if (s2[ix,j]!=0){
-          count=count+1
-          res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
-          edgelist2[[count]]<-res
-        }
-        
-      }
-    }
-    
-    if(length(edgelist2)==0){
-      r<-moduleCellQvalue[,!apply(moduleCellQvalue,2,is.na)[1,]] 
-      s<-moduleCellCor[,!apply(moduleCellCor,2,is.na)[1,]]
-      r2<-as.matrix(r,nrow=nrow(r),dimnames=dimnames(r))
-      s2<-as.matrix(s,nrow=nrow(s),dimnames=dimnames(s))
-      r2[r2>0.25]<-1
-      r2[r2<0.25]<-2
-      r3<-r2-1
-      s2[r3==0]<-0
-      edgelist2<-list()
-      count<-0
-      for (ix in 1:nrow(s2)){
-        for (j in 1:ncol(s2)){
-          if (s2[ix,j]!=0){
-            count=count+1
-            res<-c(row.names(s2)[ix],colnames(s2)[j],s2[ix,j],r[ix,j])
-            edgelist2[[count]]<-res
-          }
-          
-        }
-      }  
-      
-    }
-    
-    edgemm2<-t(matrix(unlist(edgelist2),nrow=4))
-    colnames(edgemm2)<-c("module","cellpropF","weight","qvalue")
-    newmod2<-apply(edgemm2,1,function(x){x[1]<-substr(x[1],3,nchar(x[1]))})
-    edgemm2[,1]<-newmod2
-    write.csv(edgemm2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"module_flow_cellprop.csv",sep="")))
-    
-    cells<-unique(edgemm2[,2])
-    cells2<-cbind(cells,rep("cellpropF",length(cells)))
-    colnames(cells2)<-c("cellpropF","kind")
-    write.csv(cells2,file=file.path(dir.results,paste('table',q.i,'.',an.count,'.',i,'.',names(questions)[[q.i]],'.',analysis,names(datalist)[i],"node_flow_cellprop.csv",sep="")))
-    
-    #END NETWORK 2 helper
-    
-    print("igraph 2")
-#NETWORK 2c igraph####
-    
-    #BEGIN igraph 2
-    
-    # Read a data set. 
-    # Data format: dataframe with 3 variables; variables 1 & 2 correspond to interactions; variable 3 corresponds to the weight of interaction
-    dataSet0 <- data.frame(edgemm2)
-    dataSet0<-merge(dataSet0,diffMEmatrix[,edge], by.x="module",by.y="row.names",all.x=T,all.y=F)
-    dataSet0<-transform(dataSet0,weight=as.numeric(as.character(weight)))
-    colnames(dataSet0)<-c("module","cellpropF","weight","qvalue","diffME")
-    dataSet<-cbind(dataSet0,abs(dataSet0$weight)^2)
-    colnames(dataSet)<-c("module","cellpropF","weight","qvalue","diffME","R_sq")
-    modulesInSet<-levels(as.factor(dataSet$module))
-    cellsInSet<-levels(as.factor(dataSet$cellpropF))
-    # Create a graph. Use simplify to ensure that there are no duplicated edges or self loops
-    gD2c <- graph.data.frame(dataSet[,c(1,2,3,4,6)], directed=FALSE)
-    
-    # Print number of nodes and edges
-    vcount(gD2c)
-    ecount(gD2c)
-    # 
-    # # Calculate some node properties and node similarities that will be used to illustrate 
-    # # different plotting abilities
-    # 
-    # # Calculate degree for all nodes
-    # degAll <- degree(gD2, v = V(gD2), mode = "all")
-    # 
-    # # Calculate betweenness for all nodes
-    # betAll <- betweenness(gD2, v = V(gD2), directed = FALSE,weights=dataSet$R_sq) / (((vcount(gD2) - 1) * (vcount(gD2)-2)) / 2)
-    # betAll.norm <- (betAll - min(betAll))/(max(betAll) - min(betAll))
-    # # rm(betAll)
-    # 
-    # #Calculate Dice similarities between all pairs of nodes
-    # #dsAll <- similarity.dice(gD, vids = V(gD), mode = "all")
-    
-    # Add new node/edge attributes based on the calculated node properties/similarities
-    
-    # gD2 <- set.vertex.attribute(gD2, "degree", index = V(gD2), value = degAll)
-    # gD2 <- set.vertex.attribute(gD2, "betweenness", index = V(gD2), value = betAll.norm)
-    V(gD2c)[modulesInSet]$kind="module"
-    V(gD2c)[cellsInSet]$kind="cellpropF"
-    
-    list.vertex.attributes(gD2c)
-    
-    # Check the attributes
-    summary(gD2c)
-    
-    #F1 <- function(x) {data.frame(similarity = dsAll[which(V(gD)$name == as.character(x$module)), which(V(gD)$name == as.character(x$pheno))])}
-    #dataSet.ext <- ddply(.data=dataSet, .variables=c("module", "pheno", "weight"), .fun=function(x) data.frame(F1(x)))
-    dataSet.ext<-dataSet
-    
-    gD2c <- set.edge.attribute(gD2c, "weight", index = E(gD2c), value = 0.0)
-    gD2c <- set.edge.attribute(gD2c, "R_sq", index = E(gD2c), value = 0.0)
-    gD2c <- set.edge.attribute(gD2c, "qvalue", index = E(gD2c), value = 0.0)
-    #gD <- set.edge.attribute(gD, "similarity", index = E(gD), value = 0)
-    
-    # The order of interactions in gD is not the same as it is in dataSet or as it is in the edge list,
-    # and for that reason these values cannot be assigned directly
-    
-    E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$R_sq <- dataSet.ext$R_sq
-    E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$weight <- dataSet$weight
-    E(gD2c)[as.character(dataSet.ext$module) %--% as.character(dataSet.ext$cellpropF)]$qvalue <- as.numeric(as.character(dataSet$qvalue))
-    
-    # Check the attributes
-    summary(gD2c)
-    
-    #END IGRAPH
-#NETWORK 2c neo4j####
-    if (neoinsert=="on"){
-      #get the dataframe to use for relationships and nodes
-      graphdata=dataSet
-      t = suppressMessages(newTransaction(graph))
-      
-      #remove rows where ratio or p-value are NA or infinite; these are at best hard to interpret, but more likely meaningless results. The full results are still in the exported csv
-      cellprop_withflow_tests<-cellprop_withflow_tests[!is.na(cellprop_withflow_tests$ratio),]
-      cellprop_withflow_tests<-cellprop_withflow_tests[!is.na(cellprop_withflow_tests$pval),]
-      cellprop_withflow_tests<-cellprop_withflow_tests[cellprop_withflow_tests$ratio!=Inf,]
-      
-      for (therow in 1:nrow(graphdata)) {
-        wmod = as.character(graphdata[therow, ]$module)
-        cp = as.character(graphdata[therow, ]$cellpropF)
-        
-        #data for some cell types may have been removed above! Some of these reults will be empty.
-        ratioX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$ratio))
-        diffPX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$pval))
-        diffQX = as.numeric(as.character(cellprop_withflow_tests[which(cellprop_withflow_tests$names==cp&cellprop_withflow_tests$edge==edge),]$BH))
-        
-        #code below only sets ratio, diffP and diffQ properties on cellpropFprop nodes if the values exist. Correlation with cellpropFprop is still included as result, even if ratio is absent or meaningless.
-        if (length(ratioX)==0|length(diffPX)==0|length(diffQX)==0){
-          diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-          query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellpropFprop {name:{cellpropFprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-          #print(paste("case1",ratioX,diffPX,diffQX))
-          suppressMessages(appendCypher(t, 
-                                        query, 
-                                        #nodes
-                                        wgcnamod = wmod, 
-                                        cellpropFprop = cp,
-                                        #invariant node properties
-                                        squareg = dataset.variables[[1]],
-                                        edgeg = edge,
-                                        contrastvarsg = contrastvars[[edge]],
-                                        contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-                                        qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-                                        weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-                                        rsqg = as.numeric(as.character(graphdata[therow,]$R_sq))#,
-                                        #                ratiog = ratioX,
-                                        #                diffPg = diffPX,
-                                        #                diffQg = diffQX
-          ))
-        }else{
-          diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-          query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cp:cellpropFprop {name:{cellpropFprop},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},ratio:{ratiog},diffP:{diffPg},diffQ:{diffQg}}) CREATE (wmod)-[:correlates {weight:{weightg},qvalue:{qval},Rsq:{rsqg},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cp)",sep="")
-          #print(paste("case2",ratioX,diffPX,diffQX))
-          suppressMessages(appendCypher(t, 
-                                        query, 
-                                        #nodes
-                                        wgcnamod = wmod, 
-                                        cellpropFprop = cp,
-                                        #invariant node properties
-                                        squareg = dataset.variables[[1]],
-                                        edgeg = edge,
-                                        contrastvarsg = contrastvars[[edge]],
-                                        contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-                                        qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-                                        weightg = as.numeric(as.character(graphdata[therow,]$weight)),
-                                        rsqg = as.numeric(as.character(graphdata[therow,]$R_sq)),
-                                        ratiog = ratioX,
-                                        diffPg = diffPX,
-                                        diffQg = diffQX
-          ))
-        }
-      }
-      suppressMessages(commit(t))
-      
-      #END NEO4J
-    }#end neoinsert if
-#NETWORK 2c graphNEL####
-    if(cytoscapelink == "on"){
-      #open Cytoscape connection    
-    gD2c.cyt <- igraph.to.graphNEL(gD2c)
-    
-    # We have to create attributes for graphNEL
-    # We'll keep the same name, so the values are passed from igraph
-    # node attributes
-    # gD2.cyt <- initNodeAttribute(gD2.cyt, 'label', 'char', "x")
-    gD2c.cyt <- initNodeAttribute(gD2c.cyt, 'kind', 'char', "y")
-    # gD2.cyt <- initNodeAttribute(gD2.cyt, 'degree', 'numeric', 0) 
-    # gD2.cyt <- initNodeAttribute(gD2.cyt, 'betweenness', 'numeric', 0) 
-    gD2c.cyt <- initNodeAttribute (gD2c.cyt, "diffME", 'numeric', 0.0)
-    # edge attributes
-    gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "weight", 'numeric', 0)
-    gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "qvalue", 'numeric', 0)
-    #gD2.cyt <- initEdgeAttribute (gD2.cyt, "weight2", 'numeric', 0)
-    #gD.cyt <- initEdgeAttribute (gD.cyt, "similarity", 'numeric', 0)
-    gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "R_sq", 'numeric', 0.0)
-    gD2c.cyt <- initEdgeAttribute (gD2c.cyt, "edgeType", "char", "undefined")
-#NETWORK 2c RCytoscape####
-
-    
-    # Now we can create a new graph window in cytoscape
-    # Be sure that CytoscapeRPC plugin is activated
-    gDCW2c <- new.CytoscapeWindow("NETWORK 2c", graph = gD2c.cyt, overwriteWindow = TRUE,host="192.168.65.2",rpcPort=9000)
-    
-    ##Send diffME to Cytoscape
-    displayGraph(gDCW2c)
-    new.nodes<-intModules[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
-    new.diffME<-unlist(all.difflist.modules[[edge]])[as.character(tests.modules$module)%in%as.character(unique(dataSet$module))]
-    
-    setNodeAttributesDirect(gDCW2c,"diffME","numeric",new.nodes,new.diffME)
-    # getNodeAttribute(gDCW2,"salmon","diffME")
-    getAllNodeAttributes(gDCW2c)
-    getAllNodes(gDCW2c)
-    
-    #Colour modules by up or down
-    control.points <- c (-1.0, 0.0, 1.0)
-    node.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
-    setNodeColorRule(gDCW2c, node.attribute.name='diffME', control.points,node.colors, mode='interpolate')
-    redraw (gDCW2c)
-    
-    # # If you also want to choose a layout from R, a list  of available layouts can be accessed as follows:
-    # cy <- CytoscapeConnection(host="192.168.65.2",rpcPort=9000)
-    # hlp <-getLayoutNames(cy)
-    
-    setLayoutProperties (gDCW2c, hlp[6], list (edge_attribute = 'R_sq'))
-    layoutNetwork(gDCW2c, hlp[6])
-    
-    # Finally, we can define rules for node colors, node sizes, and edge colors
-    #pheno nodes are red
-    cellcol<-rgb(t(col2rgb(c("green"))),maxColorValue = 255)
-    setNodeColorDirect (gDCW2c,cells,cellcol)
-    
-    lockNodeDimensions(gDCW2c,FALSE)
-    setNodeWidthDirect(gDCW2c, modules,60)
-    setNodeWidthDirect(gDCW2c, cells,50)
-    newlabelcol<-rgb(t(col2rgb(c("black"))),maxColorValue = 255)
-    setNodeLabelColorDirect(gDCW2c, cells, newlabelcol)
-    
-    control.points <- c (-1.0, 0.0, 1.0)
-    edge.colors <- rgb(t(col2rgb(c("black","blue","white","red","green"))),maxColorValue = 255)
-    setEdgeColorRule(gDCW2c, edge.attribute.name='weight', control.points,edge.colors, mode='interpolate')
-    redraw (gDCW2c)
-    #End optional network####
-    }#end optional cytoscape
-}#end NETWORK 2c conditional
+#end optional and conditional networks
 
 #NETWORK 3 helper####
 print("helper 3")
@@ -6321,29 +6491,51 @@ graphdata=dataSet
 # MERGE (reac:reactomePW {name:{reacPW}})
 # CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(reac)
 # "
-t = suppressMessages(newTransaction(graph))
+#t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  reac = as.character(graphdata[therow, ]$ID)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (reac:reactomePW {name:{reacPW}}) CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(reac)",sep="")
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               wgcnamod = wmod, 
-               reacPW = reac,
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
 
-suppressMessages(commit(t))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (reac:reactomePW {name:csvLine.ID}) 
+              CREATE (wmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(reac)",sep="",collapse="")
+
+cypher(graph,query)
+
+
+# for (therow in 1:nrow(graphdata)) {
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   reacPW = as.character(graphdata[therow, ]$ID)
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = '",diffMEg,"' ON MATCH SET wmod.diffME = '",diffMEg,"' MERGE (reac:reactomePW {name:'",reacPW,"'}) CREATE (wmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(reac)",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              wgcnamod = wmod, 
+#   #              reacPW = reac,
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -6539,29 +6731,52 @@ graphdata=dataSet
 # MERGE (cellx:cellEx {name:{cellExpr}})
 # CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cellx)
 # "
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  cellx = as.character(graphdata[therow, ]$cell)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cellx:cellEx {name:{cellExpr}}) CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cellx)",sep="")
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               wgcnamod = wmod, #name
-               cellExpr = cellx, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+#t = suppressMessages(newTransaction(graph))
 
-suppressMessages(commit(t))
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (cellx:cellEx {name:csvLine.cell}) 
+              CREATE (wmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cellx)",sep="",collapse="")
+
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   cellExpr = as.character(graphdata[therow, ]$cell)
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (cellx:cellEx {name:'",cellExpr,"'}) CREATE (wmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cellx)",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              wgcnamod = wmod, #name
+#   #              cellExpr = cellx, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -6785,29 +7000,53 @@ graphdata=dataSet
 # MERGE (pwm:PalWangPW {name:{pwinstance}})
 # CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(pwm)
 # "
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  pwm = as.character(graphdata[therow, ]$PalWang)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (pwm:PalWangPW {name:{pwinstance}}) CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(pwm)",sep="")
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               wgcnamod = wmod, #name
-               pwinstance = pwm, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+#t = suppressMessages(newTransaction(graph))
 
-suppressMessages(commit(t))
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (pwm:PalWangPW {name:csvLine.PalWang}) 
+              CREATE (wmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(pwm)",sep="",collapse="")
+
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   pwinstance = as.character(graphdata[therow, ]$PalWang)
+#   pwinstance<-gsub("'","",pwinstance)#apostrophes break cypher queries
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (pwm:PalWangPW {name:'",pwinstance,"'}) CREATE (wmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(pwm)",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              wgcnamod = wmod, #name
+#   #              pwinstance = pwm, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -7006,29 +7245,50 @@ graphdata=dataSet
 # MERGE (ipw:ImmunePW {name:{ipwinstance}})
 # CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(ipw)
 # "
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  wmod = as.character(graphdata[therow, ]$module)
-  ipw = as.character(graphdata[therow, ]$immunePW)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (ipw:ImmunePW {name:{ipwinstance}}) CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(ipw)",sep="")
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               wgcnamod = wmod, #name
-               ipwinstance = ipw, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+#t = suppressMessages(newTransaction(graph))
 
-suppressMessages(commit(t))
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (ipw:ImmunePW {name:csvLine.immunePW}) 
+              CREATE (wmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(ipw)",sep="",collapse="")
+
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   ipwinstance = as.character(graphdata[therow, ]$immunePW)
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (ipw:ImmunePW {name:'",ipwinstance,"'}) CREATE (wmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(ipw)",sep="",collapse="")
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              wgcnamod = wmod, #name
+#   #              ipwinstance = ipw, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -7192,34 +7452,59 @@ plot(gD8)
 if (neoinsert=="on"){
 #get the dataframe to use for relationships and nodes
 graphdata=dataSet
-#network-specific cypher query
-query = "
-MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}})
-MERGE (reac:reactomePW {name:{reacPW}})
-CREATE (bmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(reac)
-"
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  bmod = as.character(graphdata[therow, ]$Baylormod)
-  reac = as.character(graphdata[therow, ]$ID)
-  
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               baylormod = bmod, 
-               reacPW = reac,
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
-  ))
-}
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
 
-suppressMessages(commit(t))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+MERGE (bmod:baylor {name:csvLine.Baylormod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'})
+ON MATCH SET bmod.diffEX=csvLine.diffEX
+ON CREATE SET bmod.diffEX=csvLine.diffEX
+MERGE (reac:reactomePW {name:csvLine.ID})
+CREATE (bmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(reac)
+",sep="",collapse="")
+
+cypher(graph,query)
+
+#t = suppressMessages(newTransaction(graph))
+
+# for (therow in 1:nrow(graphdata)) {
+#   baylormod = as.character(graphdata[therow, ]$Baylormod)
+#   reacPW = as.character(graphdata[therow, ]$ID)
+#   reacPW<-gsub("'","*",reacPW)
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   
+#   query = paste("
+# MERGE (bmod:baylor {name:'",baylormod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:'",diffEXg,"'})
+# MERGE (reac:reactomePW {name:'",reacPW,"'})
+# CREATE (bmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(reac)
+# ",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              baylormod = bmod, 
+#   #              reacPW = reac,
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -7395,33 +7680,55 @@ if (neoinsert=="on"){
 #get the dataframe to use for relationships and nodes
 graphdata=dataSet
 #network-specific cypher query
-query = "
-MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}})
-MERGE (cellx:cellEx {name:{cellExpr}})
-CREATE (bmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(cellx)
-"
-t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  bmod = as.character(graphdata[therow, ]$Baylormod)
-  cellx = as.character(graphdata[therow, ]$cell)
-  
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               baylormod = bmod, 
-               cellExpr = cellx, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
-  ))
-}
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-suppressMessages(commit(t))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+MERGE (bmod:baylor {name:csvLine.Baylormod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'})
+ON MATCH SET bmod.diffEX=csvLine.diffEX
+ON CREATE SET bmod.diffEX=csvLine.diffEX
+MERGE (cellx:cellEx {name:csvLine.cell})
+CREATE (bmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cellx)
+",sep="",collapse="")
+
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   baylormod = as.character(graphdata[therow, ]$Baylormod)
+#   cellExpr = as.character(graphdata[therow, ]$cell)
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   
+#   query = paste("
+# MERGE (bmod:baylor {name:'",baylormod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:'",diffEXg,"'})
+# MERGE (cellx:cellEx {name:'",cellExpr,"'})
+# CREATE (bmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(cellx)
+# ",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              baylormod = bmod, 
+#   #              cellExpr = cellx, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert 
@@ -7597,33 +7904,54 @@ if (neoinsert=="on"){
 #get the dataframe to use for relationships and nodes
 graphdata=dataSet
 #network-specific cypher query
-query = "
-MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}})
-MERGE (pwm:PalWangPW {name:{pwinstance}})
-CREATE (bmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(pwm)
-"
-t = suppressMessages(newTransaction(graph))
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-for (therow in 1:nrow(graphdata)) {
-  bmod = as.character(graphdata[therow, ]$Baylormod)
-  pwm = as.character(graphdata[therow, ]$PalWang)
-  
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               baylormod = bmod, 
-               pwinstance = pwm, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
-  ))
-}
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+MERGE (bmod:baylor {name:csvLine.Baylormod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:csvLine.diffEX})
+MERGE (pwm:PalWangPW {name:csvLine.PalWang})
+CREATE (bmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(pwm)
+",sep="",collapse="")
 
-suppressMessages(commit(t))
+cypher(graph,query)
+#t = suppressMessages(newTransaction(graph))
+
+# for (therow in 1:nrow(graphdata)) {
+#   baylormod = as.character(graphdata[therow, ]$Baylormod)
+#   pwinstance = as.character(graphdata[therow, ]$PalWang)
+#   pwinstance<-gsub("'","*",pwinstance)
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   
+#   
+#   query = paste("
+# MERGE (bmod:baylor {name:'",baylormod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:'",diffEXg,"'})
+# MERGE (pwm:PalWangPW {name:'",pwinstance,"'})
+# CREATE (bmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(pwm)
+# ",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              baylormod = bmod, 
+#   #              pwinstance = pwm, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -7806,33 +8134,54 @@ if (neoinsert=="on"){
 #get the dataframe to use for relationships and nodes
 graphdata=dataSet
 #network-specific cypher query
-query = "
-MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}})
-MERGE (ipw:ImmunePW {name:{ipwinstance}})
-CREATE (bmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(ipw)
-"
-t = suppressMessages(newTransaction(graph))
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
-for (therow in 1:nrow(graphdata)) {
-  bmod = as.character(graphdata[therow, ]$Baylormod)
-  ipw = as.character(graphdata[therow, ]$immunePW)
-  
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               baylormod = bmod, 
-               ipwinstance = ipw, #name of instance 
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
-  ))
-}
+query=paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine
+MERGE (bmod:baylor {name:csvLine.Baylormod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:csvLine.diffEX})
+MERGE (ipw:ImmunePW {name:csvLine.immunePW})
+CREATE (bmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(ipw)
+",sep="",collapse="")
 
-suppressMessages(commit(t))
+cypher(graph,query)
+
+#t = suppressMessages(newTransaction(graph))
+
+# for (therow in 1:nrow(graphdata)) {
+#   baylormod = as.character(graphdata[therow, ]$Baylormod)
+#   ipwinstance = as.character(graphdata[therow, ]$immunePW)
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   
+#   paste(query = "
+# MERGE (bmod:baylor {name:'",baylormod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:'",diffEXg,"'})
+# MERGE (ipw:ImmunePW {name:'ipwinstance'})
+# CREATE (bmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(ipw)
+# ",sep="",collapse="")
+#   
+#   cypher(graph,query)
+#   
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              baylormod = bmod, 
+#   #              ipwinstance = ipw, #name of instance 
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -8010,30 +8359,51 @@ graphdata=dataSet
 # MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}})
 # CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(bmod)
 # "
-t = suppressMessages(newTransaction(graph))
+#t = suppressMessages(newTransaction(graph))
 
-for (therow in 1:nrow(graphdata)) {
-  bmod = as.character(graphdata[therow, ]$Baylormod)
-  wmod = as.character(graphdata[therow, ]$module)
-  diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  query = paste("MERGE (wmod:wgcna {name:{wgcnamod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (bmod:baylor {name:{baylormod},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg},diffEX:{diffEXg}}) CREATE (wmod)-[:enriched {qvalue:{qval},square:{squareg},edge:{edgeg},contrastvar:{contrastvarsg},contrast:{contrastg}}]->(bmod)",sep="")
-  suppressMessages(appendCypher(t, 
-               query, 
-               #nodes
-               baylormod = bmod, 
-               wgcnamod = wmod, #name
-               #invariant node properties
-               squareg = dataset.variables[[1]],
-               edgeg = edge,
-               contrastvarsg = contrastvars[[edge]],
-               contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
-               qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
-               diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))#,
-               #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
-  ))
-}
+#invariant node properties
+squareg = dataset.variables[[1]]
+edgeg = edge
+contrastvarsg = contrastvars[[edge]]
+contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]])
 
-suppressMessages(commit(t))
+write.csv(graphdata,file.path(dir.import,"tmp.csv"))
+
+query = paste("USING PERIODIC COMMIT 10000 LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+              MERGE (wmod:wgcna {name:csvLine.module,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) 
+              ON CREATE SET wmod.diffME = csvLine.diffME 
+              ON MATCH SET wmod.diffME = csvLine.diffME 
+              MERGE (bmod:baylor {name:csvLine.Baylormod,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:csvLine.diffEX}) 
+              CREATE (wmod)-[:enriched {qvalue:csvLine.qvalue,square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(bmod)",sep="")
+cypher(graph,query)
+
+# for (therow in 1:nrow(graphdata)) {
+#   baylormod = as.character(graphdata[therow, ]$Baylormod)
+#   wgcnamod = as.character(graphdata[therow, ]$module)
+#   diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   qval = as.numeric(as.character(graphdata[therow,]$qvalue))
+#   diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))
+#   
+#   query = paste("MERGE (wmod:wgcna {name:'",wgcnamod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}) ON CREATE SET wmod.diffME = ",diffMEg," ON MATCH SET wmod.diffME = ",diffMEg," MERGE (bmod:baylor {name:'",baylormod,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"',diffEX:'",diffEXg,"'}) CREATE (wmod)-[:enriched {qvalue:'",qval,"',square:'",squareg,"',edge:'",edgeg,"',contrastvar:'",contrastvarsg,"',contrast:'",contrastg,"'}]->(bmod)",sep="")
+#   cypher(graph,query)
+#   
+#   # suppressMessages(appendCypher(t, 
+#   #              query, 
+#   #              #nodes
+#   #              baylormod = bmod, 
+#   #              wgcnamod = wmod, #name
+#   #              #invariant node properties
+#   #              squareg = dataset.variables[[1]],
+#   #              edgeg = edge,
+#   #              contrastvarsg = contrastvars[[edge]],
+#   #              contrastg = paste(pathways[[edge]][[2]],"-",pathways[[edge]][[1]]),
+#   #              qval = as.numeric(as.character(graphdata[therow,]$qvalue)),
+#   #              diffEXg = as.numeric(as.character(graphdata[therow,]$diffEX))#,
+#   #              #diffMEg = as.numeric(as.character(graphdata[therow,]$diffME))
+#   # ))
+# }
+
+#suppressMessages(commit(t))
 
 #END NEO4J
 }#end neoinsert if
@@ -8235,18 +8605,19 @@ gc()
 
 #NETWORK 14: Map module probes to WGCNA modules####
 if (neoinsert=="on"){
-nodes<-RNeo4j::nodes
+#nodes<-RNeo4j::nodes
 #network-specific cypher query
 
 write.csv(geneInfo,file.path(dir.import,"tmp.csv"))
 if(class(datalist[[i]])=="ExpressionSet"){
   for (edge in 1:5){
     query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-                  MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
-                  MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
+                  MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
+                  MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
                   CREATE (probe)-[:mapsTo]->(wmod)              
                   MERGE (gene:SYMBOL {name:csvLine.HGNC_symbol}) 
                   MERGE (probe)-[:mapsTo]->(gene)",sep="")
+    print(query)
     cypher(graph,query)
     queryclean<-"MATCH (s:SYMBOL {name:'NA'}) OPTIONAL MATCH (s)-[r]-() DELETE s, r"
     cypher(graph,queryclean)
@@ -8254,12 +8625,8 @@ if(class(datalist[[i]])=="ExpressionSet"){
   }
 }else if(class(datalist[[i]])=="LumiBatch"){
   for (edge in 1:5){
-    query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-                  MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
-                  MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
-                  CREATE (probe)-[:mapsTo]->(wmod)              
-                  MERGE (gene:SYMBOL {name:csvLine.targetID}) 
-                  MERGE (probe)-[:mapsTo]->(gene)",sep="")
+    query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine MATCH (wmod:wgcna {name:csvLine.moduleColor,square:'",dataset.variables[[1]],"',edge:'",edge,"'}) MATCH (probe:PROBE {name:csvLine.substanceBXH,square:'",dataset.variables[[1]],"',edge:'",edge,"'}) CREATE (probe)-[:mapsTo]->(wmod) MERGE (gene:SYMBOL {name:csvLine.targetID}) MERGE (probe)-[:mapsTo]->(gene)",sep="",collapse="")
+    print(query)
     cypher(graph,query)
     queryclean<-"MATCH (s:SYMBOL {name:'NA'}) OPTIONAL MATCH (s)-[r]-() DELETE s, r"
     cypher(graph,queryclean)
@@ -8275,7 +8642,7 @@ if(class(datalist[[i]])=="ExpressionSet"){
 #debug: used merge
 #back to create
 if (neoinsert=="on"){
-  nodes<-RNeo4j::nodes
+  #nodes<-RNeo4j::nodes
   #network-specific cypher query
   for(cytmod in modNetList){
     graphdata_big<-cytmod$edgeData[order(-cytmod$edgeData$weight),]
@@ -8288,14 +8655,44 @@ if (neoinsert=="on"){
     write.csv(graphdata_all,file.path(dir.import,"tmp.csv"))
     for (edge in 1:5){
       query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-                    MATCH (probe1:PROBE {name:csvLine.fromNode,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
-                    MATCH (probe2:PROBE {name:csvLine.toNode,square:'",dataset.variables[[1]],"',edge:toInt(",edge,")})
-                    CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:toInt(",edge,")}]->(probe2)",sep="")
+                    MATCH (probe1:PROBE {name:csvLine.fromNode,square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")})
+                    MATCH (probe2:PROBE {name:csvLine.toNode,square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")})
+                    CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")}]->(probe2)",sep="")
       cypher(graph,query)
     }#end NEO4J edges
   }#end modNetList loop
 }#end neoinsert if
   
+
+#NETWORK 19 Map module probes to baylor modules####
+
+if (neoinsert=="on"){
+  modnudf<-data.frame()
+  for (mod in names(modNU)){
+    baylor<-rep(mod,length(modNU[[mod]]))
+    PROBE<-modNU[[mod]]
+    block<-cbind(baylor,PROBE)
+    modnudf<-rbind(modnudf,block)
+  }
+  
+  write.csv(modnudf,file.path(dir.import,"tmp.csv"))
+  
+  
+    for (edge in 1:5){
+      query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
+                  MERGE (baylormod:baylor {name:csvLine.baylor,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
+                  MERGE (probe:PROBE {name:csvLine.PROBE,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
+                  CREATE (probe)-[:mapsTo]->(baylormod)",sep="")
+      cypher(graph,query)
+      
+    }
+  
+  
+  
+}#end neoinsert if
+
+
+
 #9_Baylor and WGCNA module correspondence*********************************####
 analysis="9_Baylor_WGCNA_Modules"
 an.count=9
@@ -8446,7 +8843,7 @@ if(q.i==length(questions)&edge==5){
 print("now for the final mappings")
 
 if (neoinsert=="on"){
-  nodes<-RNeo4j::nodes
+  #nodes<-RNeo4j::nodes
 
 #NETWORK 16: Map SYMBOL to PalWang####
 data(PWLists)
@@ -8505,7 +8902,7 @@ map1<-data.frame(cbind(names(mappingInfo),as.character(mappingInfo)))
 colnames(map1)<-c("nuID","ENTREZID")
 
 map2ids<-keys(reactome.db,keytype="PATHNAME")
-map2<-select(reactome.db,keys=map2ids,columns=c("ENTREZID"),keytype="PATHNAME")
+map2<-AnnotationDbi::select(reactome.db,keys=map2ids,columns=c("ENTREZID"),keytype="PATHNAME")
 
 mappingInfo2 <- nuID2targetID(nuIDs, lib.mapping='lumiHumanIDMapping')
 head(mappingInfo2)
@@ -8548,7 +8945,7 @@ head(ImmunePathwayLists)
 #Make compatible names
 newIpwNames<-gsub(",",";;",gsub(")","*",gsub("(","*",ImmunePathwayLists[,2],fixed=TRUE),fixed=TRUE),fixed=TRUE)
 
-#first get only the PalWang pathways in current DB
+#first get only the ImmunePW pathways in current DB
 cIPW<-suppressMessages(cypher(graph,"MATCH (n:ImmunePW) RETURN DISTINCT n.name"))
 cIPW$n.name<-gsub("'","prime",cIPW$n.name)
 
@@ -8631,16 +9028,23 @@ colnames(graphdata)<-c("cellprop","cell")
 write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
 query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-              MATCH (c2:cellprop {name:csvLine.cellprop}) MERGE (cell:CELL {name:csvLine.cell}) CREATE (c2)-[:mapsTo]->(cell)",sep="")
+              MERGE (c2:cellprop {name:csvLine.cellprop}) MERGE (cell:CELL {name:csvLine.cell}) CREATE (c2)-[:mapsTo]->(cell)",sep="")
 cypher(graph,query)
 
 query<-'MATCH (a:personPheno),(b:pheno) WHERE a.name = b.name AND a.square = b.square CREATE (a)-[r:is]->(b) RETURN type(r)'
 cypher(graph,query)
 ##end new
 
+######
+#fixing vst####
+
 #new
-graphdata<-read.csv(file.path(dir.data_root,"variable_types.csv"),stringsAsFactors = FALSE)
-#graphdata<-read.csv("~/source_data/variable_types.csv",stringsAsFactors = FALSE)
+graphdata<-read.csv(file.path(dir.data_root,"variable_types_renamed.csv"),stringsAsFactors = FALSE)
+#graphdata<-read.csv("~/source_data/variable_types_renamed.csv",stringsAsFactors = FALSE)
+
+#fix variable names
+
+
 
 colnames(graphdata)<-c("study","personPheno","vartype","varsubtype")
 write.csv(graphdata,file.path(dir.import,"tmp.csv"))
@@ -8654,11 +9058,12 @@ write.csv(graphdata,file.path(dir.import,"tmp.csv"))
 
 query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
               MATCH (p:personPheno {name:csvLine.personPheno}) MERGE (vst:varsubtype {name:csvLine.varsubtype})
-              CREATE (p)-[:mapsTo]->(vst)
+              MERGE (p)-[:mapsTo]->(vst)
               MERGE (vt:vartype {name:csvLine.vartype})
               MERGE (vst)-[:mapsTo]->(vt)",sep="")
 cypher(graph,query)
 
+######
 
 
 
