@@ -30,12 +30,12 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
   cellscorelist<-list()
   for (cellC in cellgrouplist){
     print(cellC)
-    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) RETURN DISTINCT p.name as cellprobename",sep="")
+    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) RETURN DISTINCT p.name as cellprobename",sep="")
     cellprobes<-cypher(graph,query)
     cellprobes<-unique(cellprobes$cellprobename)
     
     #get nuIDs for cell probes and tightly correlated ones, regardless which module####
-    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(p2:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:",edgeC,"})-[rx]-(n:wgcna) RETURN DISTINCT y.name AS probename",sep="")
+    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:'",edgeC,"'})-[rx]-(n:wgcna) RETURN DISTINCT y.name AS probename",sep="")
     probes<-cypher(graph,query)
     nuID<-unique(probes$probename)
     nuID<-nuID[which(!is.na(nuID))]
@@ -53,7 +53,7 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
         #wgcna cols####
         print("start query 3")
         
-        query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(p2:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r3]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) RETURN DISTINCT y.name AS probe, n.name AS wgcnaname",sep="")
+        query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r3]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) RETURN DISTINCT y.name AS probe, n.name AS wgcnaname",sep="")
         wgcnalist0<-unique(cypher(graph,query))
         addnames<-cbind(nuID[!nuID%in%wgcnalist0$probe],rep("NONE",length(nuID[!nuID%in%wgcnalist0$probe])))
         colnames(addnames)<-c("probe","wgcnaname")
@@ -75,7 +75,7 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
         #PATHWAYS####
         print(paste("start query 4;pwm=",pwm,";PalWang=",PalWang,sep=""))
         if (pwm=="wgcna"){
-          query<-paste("MATCH (c:CELL)-[r0]-(c1:cellEx {name:'",cellC,"'})-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r3]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH n MATCH (n:wgcna {square:'",squareC,"',edge:",edgeC,"})-[r4]-(pw) WHERE (pw:reactomePW OR pw:ImmunePW) RETURN DISTINCT n.name as module, pw.name as pathway,r4.qvalue as qvalue",sep="")
+          query<-paste("MATCH (c:CELL)-[r0]-(c1:cellEx {name:'",cellC,"'})-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r3]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH n MATCH (n:wgcna {square:'",squareC,"',edge:'",edgeC,"'})-[r4]-(pw) WHERE (pw:reactomePW OR pw:ImmunePW) RETURN DISTINCT n.name as module, pw.name as pathway,r4.qvalue as qvalue",sep="")
           
           pwlist<-cypher(graph,query)
           try(pwlist<-pwlist[order(pwlist$qvalue,decreasing=FALSE),])
@@ -90,7 +90,7 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
           numpw<-length(pw)
           
           pwchar<-paste("'",pw,"'",collapse=",",sep="")
-          query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE pw.name IN [",pwchar,"] RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
+          query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE pw.name IN [",pwchar,"] RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
           probelist<-cypher(graph,query)
           
           pwmatrix<-matrix(nrow=nrow(cormat),ncol=numpw,data=0)
@@ -106,16 +106,16 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
           
         }else{
           if(PalWang==TRUE){
-            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN y.name as probe, pw.name as pw",sep="")
+            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2a]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN y.name as probe, pw.name as pw",sep="")
           }else{
-            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW) RETURN y.name as probe, pw.name as pw",sep="")
+            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2a]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW) RETURN y.name as probe, pw.name as pw",sep="")
           }
           pwlist<-cypher(graph,query)
           pwlist<-unique(pwlist)
           print(paste("dim pwlist",dim(pwlist)))
           
           if(is.null(pwlist)){
-            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN y.name as probe, pw.name as pw",sep="")
+            query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2a]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE)-[r2]-(p2:PROBE) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r5]-(s:SYMBOL)-[r6]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN y.name as probe, pw.name as pw",sep="")
             pwlist<-cypher(graph,query)
             pwlist<-unique(pwlist)
           }#add PalWang if
@@ -146,7 +146,7 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
             #query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE pw.name = 'Pyruvate metabolism and Citric Acid *TCA* cycle' RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
             
             #query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE pw.name IN [",pwchar,"] RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
-            query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WHERE pw.name =~ ",gsub("\\*","[\\*]",gsub("','","|",pwchar))," RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
+            query<-paste("MATCH (pw)-[r1]-(s:SYMBOL)-[r2]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2a]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WHERE pw.name =~ ",gsub("\\*","[\\*]",gsub("','","|",pwchar))," RETURN DISTINCT p.name AS probe, pw.name as pathway",sep="")
             
             probelist<-cypher(graph,query)
             probelist<-unique(probelist)
@@ -168,11 +168,11 @@ cellCore2<-function(study="Berry",squareC,edgeC,cellGroup,pwm,PalWang,plotCell=T
         }#end non-wgna else
         
         #logfc####
-        query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2a]-(n:wgcna {square:'",squareC,"',edge:",edgeC,"}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:",edgeC,"})-[r2]-(p2:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:",edgeC,"}) RETURN DISTINCT y.name as probe, y.logfc AS logfc ",sep="")
+        query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2a]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:'",edgeC,"'}) RETURN DISTINCT y.name as probe, y.logfc AS logfc ",sep="")
         
         logfclist0<-cypher(graph,query)
         addlogfc<-paste("'",paste(cellprobes[!cellprobes%in%logfclist0$probe],collapse="','"),"'",sep="")
-        query<-paste("MATCH (p:PROBE {square:'",squareC,"',edge:",edgeC,"}) WHERE p.name IN [",addlogfc,"] RETURN DISTINCT p.name as probe, p.logfc AS logfc ",sep="")
+        query<-paste("MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE p.name IN [",addlogfc,"] RETURN DISTINCT p.name as probe, p.logfc AS logfc ",sep="")
         addlogfclist<-cypher(graph,query)
         logfclist<-rbind(logfclist0,addlogfclist)
         
