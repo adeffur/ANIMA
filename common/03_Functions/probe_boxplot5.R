@@ -47,7 +47,7 @@ probe_boxplot5<-function(squareC,generegex,probetype=FALSE,miny=6,maxy=14,orderP
   data.qs<-data.q[,subset]
   pd<-pData(data.q)[subset,]
   #get probes for subset (re-use subsetting function from cellcor) and boxplot annotation information
-  query0<-paste("MATCH (s:SYMBOL)-[r]-(p:PROBE) WHERE s.name =~ '",generegex,"' AND p.square= '",squareC,"' AND p.edge= ",edgeC," RETURN s.name AS Symbol, p.edge as Edge, p.name AS probe, p.logfc AS logfc, p.adjPVAL AS pval, p.contrastvar AS contrastvar, p.contrast AS contrast",sep="")
+  query0<-paste("MATCH (s:SYMBOL)-[r]-(p:PROBE) WHERE s.name =~ '",generegex,"' AND p.square= '",squareC,"' AND p.edge= '",edgeC,"' RETURN s.name AS Symbol, p.edge as Edge, p.name AS probe, p.logfc AS logfc, p.adjPVAL AS pval, p.contrastvar AS contrastvar, p.contrast AS contrast",sep="")
   res0<-cypher(graph,query0)
   
   if(probetype==TRUE){
