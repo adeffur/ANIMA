@@ -45,7 +45,7 @@ moduleMeta<-function(type="sets",extent=111,setlist=c("berry.train","berry.test"
         res<-res[!duplicated(res$module),]
         print("debug MM 4")
         print(nrow(res))
-        write.csv(res,"~/output/res.csv")
+        write.csv(res,"/home/rstudio/output/res.csv")
         #if(nrow(res)>258){res<-res[which(res$module!='M8.90'),]}#hardcoded fix for M8.90 bug
         if(nrow(res)>260){res<-res[which(res$module!='M8.90'),]}#hardcoded fix for M8.90 bug
         print("debug MM 5")
