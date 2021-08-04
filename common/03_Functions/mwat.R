@@ -20,6 +20,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
   #pseudo classvar2:control, classvar2:cases, classvar1:control, classvar1:case, classvar1:control|classvar1:case
   query<-paste("MATCH (n:wgcna {square:'",squareM,"', name:'blue'}) RETURN n.edge AS edge, n.contrastvar AS contrastvar, n.contrast AS contrast",sep="")
   res<-cypher(graph,query)
+  print("cypher query done")
   classvar1<-res$contrastvar[1]
   classvar2<-res$contrastvar[3]
   c1con<-unlist(strsplit(res$contrast[1]," - "))[2]
@@ -32,10 +33,12 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
   data.qs<-data.q[,subset]
   
   #get nuIDs for module probes
-  query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"})-[r0]-(p:PROBE) RETURN p.name AS nuID",sep="")
+  query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'})-[r0]-(p:PROBE) RETURN p.name AS nuID",sep="")
   nuIDs<-cypher(graph,query)
+  print("cypher query done for nuIDs")
   #subset the data and make correlation matrix
   turq.data<-exprs(data.qs)[nuIDs$nuID,]
+  print("data subsetted")
   if (prod(dim(turq.data)) != 0){
     print("cormat")
     print(dim(turq.data))
@@ -53,7 +56,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     #generate annotation matrices
     #CELLS
     print("begin cells")
-    query<-paste("MATCH (c:cellEx)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(c:cellEx) RETURN p.name AS probe, s.name AS gene, c.name AS cell",sep="")
+    query<-paste("MATCH (c:cellEx)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(c:cellEx) RETURN p.name AS probe, s.name AS gene, c.name AS cell",sep="")
     cellexlist<-cypher(graph,query)
     cells<-unique(cellexlist$cell)
     numcells<-length(unique(cellexlist$cell))
@@ -67,13 +70,13 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     dimnames(cellmatrix)<-list(nuIDs$nuID,"None enriched")}
     #PATHWAYS and logfc
     print("begin pw and logfc")
-    query<-paste("MATCH (pw)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW) RETURN p.name AS probe, s.name AS gene, pw.name AS pathway, r3.qvalue AS qvalue",sep="")
+    query<-paste("MATCH (pw)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW) RETURN p.name AS probe, s.name AS gene, pw.name AS pathway, toFloat(r3.qvalue) AS qvalue",sep="")
     pwlist<-cypher(graph,query)
     try(pwlist<-pwlist[order(pwlist$qvalue,decreasing=FALSE),])
     pw<-unique(pwlist$pathway)
     numpw<-length(unique(pwlist$pathway))
     if (numpw < 3){  
-      query<-paste("MATCH (pw)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN p.name AS probe, s.name AS gene, pw.name AS pathway, r3.qvalue AS qvalue",sep="")
+      query<-paste("MATCH (pw)-[r3]-(n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'})-[r0]-(p:PROBE)-[r1]-(s:SYMBOL)-[r2]-(pw) WHERE (pw:ImmunePW OR pw:reactomePW OR pw:PalWangPW) RETURN p.name AS probe, s.name AS gene, pw.name AS pathway, toFloat(r3.qvalue) AS qvalue",sep="")
       pwlist<-cypher(graph,query)
       try(pwlist<-pwlist[order(pwlist$qvalue,decreasing=FALSE),])
       pw<-unique(pwlist$pathway)
@@ -95,7 +98,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
       pwmatrix[,path]<-nuIDs$nuID%in%pwlist$probe[which(pwlist$pathway==pw[path])]
     }
     pwmatrix<-pwmatrix[,ncol(pwmatrix):1]
-    query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"})-[r0]-(p:PROBE) RETURN p.name AS probe, p.logfc as logfc",sep="")
+    query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'})-[r0]-(p:PROBE) RETURN p.name AS probe, toFloat(p.logfc) as logfc",sep="")
     logfclist<-cypher(graph,query)
     fc<-matrix(nrow=nrow(cormat),ncol=1,data=0)
     dimnames(fc)<-list(nuIDs$nuID,"logfc")
@@ -115,7 +118,7 @@ mwat<-function(study="Berry",squareM,moduleM,edgeM){
     
     print("begin wgcna")
     #WGCNA module stats for annotation
-    query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:",edgeM,"}) RETURN n.name AS name, n.square AS square, n.edge AS edge, n.modAUC1 as modAUC1, n.modAUC2 AS modAUC2, n.diffME AS diffME, n.sigenrich AS sigenrich",sep="")
+    query<-paste("MATCH (n:wgcna {name:'",moduleM,"', square:'",squareM,"', edge:'",edgeM,"'}) RETURN n.name AS name, n.square AS square, n.edge AS edge, toFloat(n.modAUC1) as modAUC1, toFloat(n.modAUC2) AS modAUC2, toFloat(n.diffME) AS diffME, toFloat(n.sigenrich) AS sigenrich",sep="")
     wa<-cypher(graph,query)
     
     print("begin plot")
