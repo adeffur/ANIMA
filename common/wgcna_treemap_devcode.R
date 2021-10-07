@@ -5,6 +5,7 @@ library(treemap)
 #wgcna
 query<-"MATCH (n:wgcna {square:'blood.PCF.defPC',edge:'5'})-[r]-(p:PROBE) RETURN n.name AS colour, COUNT(r) as size"
 query<-"MATCH (n:wgcna {square:'blood.PCF.probPC',edge:'5'})-[r]-(p:PROBE) RETURN n.name AS colour, COUNT(r) as size"
+
 query<-"MATCH (n:wgcna {square:'prob.def.blood',edge:'5'})-[r]-(p:PROBE) RETURN n.name AS colour, COUNT(r) as size"
 query<-"MATCH (n:wgcna {square:'prob.def.fluid',edge:'5'})-[r]-(p:PROBE) RETURN n.name AS colour, COUNT(r) as size"
 
@@ -18,7 +19,7 @@ treemap(res,index="colour",vColor="colour",vSize="size",type="color")
 #baylormod
 query<-"MATCH (b:baylor {square:'prob.def.fluid',edge:'5'})-[r]-(p:PROBE) RETURN b.name AS name, COUNT(r) as size, toFloat(b.diffEX) as value"
 res<-cypher(graph,query)
-treemap(res,index="name",vSize="size",vColor="value",type="value",palette="-RdYlBu")
+treemap(res,index="name",vSize="size",vColor="value",type="value",palette="-RdBu")
 head(res)
 
 

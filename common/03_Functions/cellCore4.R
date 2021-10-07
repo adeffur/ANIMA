@@ -31,7 +31,9 @@ cellCore4<-function(study="Berry",squareC,edgeC,cellC,pwm,PalWang,plotCell=TRUE)
     cellprobes<-unique(cellprobes$cellprobename)
     
     #get nuIDs for cell probes and tightly correlated ones, regardless which module####
-    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:'",edgeC,"'})-[rx]-(n:wgcna) RETURN DISTINCT y.name AS probename",sep="")
+    #query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE r2.TOMweight > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:'",edgeC,"'})-[rx]-(n:wgcna) RETURN DISTINCT y.name AS probename",sep="")
+    query<-paste("MATCH q1=(c:cellEx {name:'",cellC,"'})-[r0]-(s:SYMBOL)-[r1]-(p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(n:wgcna {square:'",squareC,"',edge:'",edgeC,"'}) WITH p OPTIONAL MATCH (p:PROBE {square:'",squareC,"',edge:'",edgeC,"'})-[r2]-(p2:PROBE {square:'",squareC,"',edge:'",edgeC,"'}) WHERE toFloat(r2.TOMweight) > .1 WITH collect(p) + collect(p2) AS x  UNWIND x AS y WITH y MATCH (y:PROBE  {square:'",squareC,"',edge:'",edgeC,"'})-[rx]-(n:wgcna) RETURN DISTINCT y.name AS probename",sep="")
+    
     probes<-cypher(graph,query)
     nuID<-unique(probes$probename)
     nuID<-nuID[which(!is.na(nuID))]

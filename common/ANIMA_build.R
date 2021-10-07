@@ -8655,9 +8655,9 @@ if (neoinsert=="on"){
     write.csv(graphdata_all,file.path(dir.import,"tmp.csv"))
     for (edge in 1:5){
       query = paste("LOAD CSV WITH HEADERS FROM 'file:///tmp.csv' AS csvLine 
-                    MATCH (probe1:PROBE {name:csvLine.fromNode,square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")})
-                    MATCH (probe2:PROBE {name:csvLine.toNode,square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")})
-                    CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:toInteger(",edge,")}]->(probe2)",sep="")
+                    MATCH (probe1:PROBE {name:csvLine.fromNode,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
+                    MATCH (probe2:PROBE {name:csvLine.toNode,square:'",dataset.variables[[1]],"',edge:'",edge,"'})
+                    CREATE (probe1)-[:TOMCOR {TOMweight:toFloat(csvLine.weight),square:'",dataset.variables[[1]],"',edge:'",edge,"'}]->(probe2)",sep="")
       cypher(graph,query)
     }#end NEO4J edges
   }#end modNetList loop

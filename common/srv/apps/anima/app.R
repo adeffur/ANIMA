@@ -73,7 +73,8 @@ library(gridExtra)
 library(cowplot)
 library(dplyr)
 
-
+library(huxtable)
+library(textreadr)
 scripts<-system(paste("ls","/home/rstudio/scripts"),intern=TRUE)
 datafiles<-system(paste("ls",datadir),intern=TRUE)
 excl<-grep("86|393",datafiles)
@@ -340,7 +341,7 @@ load("/home/rstudio/output/build/allmodules.RData")
   
 # Define UI ####
 ui<-fluidPage(
-  #shinythemes::themeSelector(),
+  shinythemes::themeSelector(),
               titlePanel(paste("ANIMA REGO:",project)),
               sidebarLayout(
                 sidebarPanel(
@@ -417,6 +418,9 @@ ui<-fluidPage(
                                 column(2,selectInput("plotcellmat","plot cellprop matrix",c("yes","no"),selected="yes",multiple=FALSE)),
                                 column(3,sliderInput("scalefactor","scale second plot",0.7,1.3,1,step=0.005),offset=.33),
                                 column(3,sliderInput("plotheight2","plot height",1000,2000,1000,step=100),offset=.33)
+                             ),fluidRow(
+                                column(3,uiOutput("selectModuleSIG"))
+                                
                              )
                              ),
                     #INTERFACE ELEMENTS: Tabs
@@ -591,7 +595,7 @@ ui<-fluidPage(
                   ),
                   fluidRow(
                     column(4,sliderInput("plotheightMeta","plotheightMeta",500,1500,700,150)),
-                    column(4,sliderInput("moduleThresh","moduleThresh",-0.05,1,-0.05,0.05))
+                    column(4,sliderInput("moduleThresh","moduleThresh",-0.05,1,-0.05,0.01))
                   ),
                   
                   h3(paste('CellMatrix:',project),style="color:#FF0000"),
@@ -687,6 +691,7 @@ ui<-fluidPage(
                         tabsetPanel(
                           tabPanel("module2d",plotOutput("module2d")),
                             tabPanel("module stats",DT::dataTableOutput("dtwgcna")),
+                            tabPanel("module table",htmlOutput("moduleTable")),
                             tabPanel("moduleHM",plotOutput("moduleHM")),
                             tabPanel("sigenrichHM",plotOutput("sigenrichHM")),
                              tabPanel("bipartite",plotOutput("projections")),
@@ -821,6 +826,8 @@ server <- shinyServer(function(input, output,session) {
    cellmatfun<-reactive({input$plotcellmat})
    heatheightfun<-reactive({input$plotheight2})
    scalefactorfun<-reactive(input$scalefactor)
+   
+   whichModuleFun<-reactive({input$moduleSelectSIG})
    
    #Pheno
    squarephenofun<-metaReactive({..(input$PhenoSquare)})
@@ -1149,39 +1156,77 @@ server <- shinyServer(function(input, output,session) {
    
    
    #modcor
-   output$selectModuleModcor<-renderUI({
-     print("doing moduleModcor")
-     reacstudyMC<-as.numeric(studyModcorfun())
-     print("reacstudyMC")
-     print(reacstudyMC)
+   output$selectModuleSIG<-renderUI({
+     print("doing moduleSIG")
+     reacstudySIG<-as.numeric(studySIGfun())
+     print("reacstudySIG")
+     print(reacstudySIG)
      #reacsetMC<-as.numeric(squareModcorfun()[reacstudyMC])#debugging
-     reacsetMC<-as.numeric(squareModcorfun())
-     print("squareModcorfun()")
-     print(squareModcorfun())
-     print("reacsetMC")
-     print(reacsetMC)
-     print("reacsetMC")
-     print(reacsetMC)
-     reacedgeMC<-as.numeric(edgeModcorfun())
-     print("reacedgeMC")
-     print(reacedgeMC)
+     reacsetSIG<-as.numeric(squareSIGfun())
+     print("squareSIGfun()")
+     print(squareSIGfun())
+     print("reacsetSIG")
+     print(reacsetSIG)
+     print("reacsetSIG")
+     print(reacsetSIG)
+     reacedgeSIG<-as.numeric(edgeSIGfun())
+     print("edgeSIGfun")
+     print(edgeSIGfun)
+
+     studySIG<-names(studies)[reacstudySIG]
+     print("studySIG")
+     print(studySIG)
+
+     setlistSIG<-setlistnameslist[[reacstudySIG]]
+     print("setlistSIG")
+     print(setlistSIG)
+    
+     squareSIG<-setlistSIG[[reacsetSIG]]
+     print("squareSIG")
+     print(squareSIG)
      
-     studyMC<-names(studies)[reacstudyMC]
-     print("studyMC")
-     print(studyMC)
-     
-     setlistMC<-setlistnameslist[[reacstudyMC]]
-     print("setlistMC")
-     print(setlistMC)
-     
-     squareMC<-setlistMC[[reacsetMC]]
-     print("squareMC")
-     print(squareMC)
-     moduleq<-paste("MATCH (n:wgcna {square:'",squareMC,"'}) RETURN DISTINCT n.name AS modulename",sep="")
+     moduleq<-paste("MATCH (n:wgcna {square:'",squareSIG,"'}) RETURN DISTINCT n.name AS modulename",sep="")
      modulenames<-cypher(graph,moduleq)
      modulenames<-modulenames$modulename[which(modulenames$modulename!="grey")]
      print(modulenames)
-     selectInput("moduleSelect","Choose module",modulenames,selected=1,multiple=FALSE)
+     modulenames<-c("All",modulenames)
+     selectInput("moduleSelectSIG","Choose module SIG",modulenames,selected=1,multiple=FALSE)
+   })
+   
+   output$selectModuleModcor<-renderUI({
+      print("doing moduleModcor")
+      reacstudyMC<-as.numeric(studyModcorfun())
+      print("reacstudyMC")
+      print(reacstudyMC)
+      #reacsetMC<-as.numeric(squareModcorfun()[reacstudyMC])#debugging
+      reacsetMC<-as.numeric(squareModcorfun())
+      print("squareModcorfun()")
+      print(squareModcorfun())
+      print("reacsetMC")
+      print(reacsetMC)
+      print("reacsetMC")
+      print(reacsetMC)
+      reacedgeMC<-as.numeric(edgeModcorfun())
+      print("reacedgeMC")
+      print(reacedgeMC)
+      
+      studyMC<-names(studies)[reacstudyMC]
+      print("studyMC")
+      print(studyMC)
+      
+      setlistMC<-setlistnameslist[[reacstudyMC]]
+      print("setlistMC")
+      print(setlistMC)
+      
+      squareMC<-setlistMC[[reacsetMC]]
+      print("squareMC")
+      print(squareMC)
+      moduleq<-paste("MATCH (n:wgcna {square:'",squareMC,"'}) RETURN DISTINCT n.name AS modulename",sep="")
+      modulenames<-cypher(graph,moduleq)
+      modulenames<-modulenames$modulename[which(modulenames$modulename!="grey")]
+      print(modulenames)
+      selectInput("moduleSelect","Choose module",modulenames,selected=1,multiple=FALSE)
+      
    })
    
    
@@ -2065,7 +2110,7 @@ server <- shinyServer(function(input, output,session) {
      plotOutput("phenoPlotPrepare", height = phenoplotheightfun())
    })
 
-   
+   #############phenogridplot####
    output$phenoGridPlotPrepare<-renderPlot({
       # 1. select the square
       print("phenogrid start::###########")
@@ -2143,8 +2188,6 @@ server <- shinyServer(function(input, output,session) {
       # paired or unpaired
       # number of classes that can be compared
       
-      
-      
       complevs<-eval(parse(text=paste("levels(as.factor(data$",fillvar,"))",sep="")))
       if (length(complevs)==4){
          my_comparisons <- list( c(complevs[1], complevs[2]),c(complevs[1], complevs[3]),c(complevs[2], complevs[4]),c(complevs[3], complevs[4]) )
@@ -2152,8 +2195,23 @@ server <- shinyServer(function(input, output,session) {
          my_comparisons <- list( c(complevs[1], complevs[2]) )
       }
       
+      myData<-aggregate(data$numeric,by=list(cats=data$Categories),FUN=function(x){c(median=median(x,na.rm=T),iqr=IQR(x,na.rm=T),n=length(x))})
+      myData<-do.call(data.frame,myData)
+      colnames(myData)<-c("Categories","median","iqr","n")
+      
+      dodge <- position_dodge(width = 0.9)
+       limits <- aes(ymax = myData$median + myData$iqr,
+                     ymin = myData$median - myData$iqr)
+      # p <- ggplot(data = myData, aes(x = names, y = mean, fill = names))
+      # p + geom_bar(stat = "identity", position = dodge) +
+      #    geom_errorbar(limits, position = dodge, width = 0.25) +
+      
       plotfig<-ggplot(data, aes(x=eval(parse(text=fillvar)), y=numeric, fill=eval(parse(text=fillvar)))) + 
+      #plotfig<-ggplot(myData, aes(x=eval(parse(text=fillvar)), y=median, fill=eval(parse(text=fillvar)))) + 
          geom_boxplot(aes(alpha=0.3 ),width=.25) +
+         #geom_bar(stat = "identity") +
+         #geom_col(stat = "median") +
+         #geom_errorbar(limits,position=position_dodge(0.9),width = 0.25) +
          #geom_boxplot(width=.25) +
          scale_fill_manual(values=c("lightsteelblue", "mistyrose", "moccasin","lightgreen")) +
          geom_dotplot(mapping=aes(x=eval(parse(text=fillvar)), y=numeric, color=eval(parse(text=fillvar)), fill = eval(parse(text=fillvar))),binaxis='y', stackdir='center',stackratio=0.7,method='dotdensity',inherit.aes = FALSE) +
@@ -2188,7 +2246,7 @@ server <- shinyServer(function(input, output,session) {
    output$phenoGridPlot <- renderUI({
       plotOutput("phenoGridPlotPrepare", height = phenoplotheightfun())
    })
-   
+   #############phenogridplot2####
    output$phenoGridPlotPrepare2<-renderPlot({
       # 1. select the square
       print("phenogrid start::###########")
@@ -2383,7 +2441,7 @@ server <- shinyServer(function(input, output,session) {
       
       
       
-      plotfig<-plotfig + facet_wrap(vars(cell),scales="free",ncol=3)
+      plotfig<-plotfig + facet_wrap(vars(cell),scales="free",ncol=2)
       
       print(plotfig)
       
@@ -2735,6 +2793,8 @@ server <- shinyServer(function(input, output,session) {
      print("reacedgeSIG")
      print(reacedgeSIG)
      
+     
+     
      studySIG<-names(studies)[reacstudySIG]
      print("studySIG")
      print(studySIG)
@@ -2794,6 +2854,10 @@ server <- shinyServer(function(input, output,session) {
                                
        )
      }
+     if(whichModuleFun()!="All"){
+        sigresult.trunc<-sigresult.trunc[which(sigresult.trunc$module==whichModuleFun()),]
+     }
+     
      #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      head(sigresult.trunc)
      nuIDlist<-sigresult.trunc$nuID
@@ -2820,6 +2884,11 @@ server <- shinyServer(function(input, output,session) {
                     
        )
      }
+     
+     if(whichModuleFun()!="All"){
+        sigresult.trunc<-sigresult.trunc[which(sigresult.trunc$module==whichModuleFun()),]
+     }
+     
      
      #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      head(sigresult.trunc)
@@ -2858,7 +2927,9 @@ server <- shinyServer(function(input, output,session) {
                     
        )
      }
-     
+     if(whichModuleFun()!="All"){
+        res2<-res2[which(res2$module==whichModuleFun()),]
+     }
      #sigresult.trunc<-subset(sigresult.trunc, logfc < sliderval1 & -log10(p.adjPVAL) < sliderval2 & logfc > sliderval3 & -log10(p.adjPVAL) > sliderval4)
      datatable(res2,filter="top")},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 15) 
      )
@@ -2879,6 +2950,25 @@ server <- shinyServer(function(input, output,session) {
      
      res<-signatureQuery()
      res<-res[order(res$module),]
+     print("###########################################################################################...")
+     print("start debug 11.09.21")
+     print("whichModuleFun")
+     print(whichModuleFun())
+     
+     squareSIG<-squareSIGfun()
+     print("squareSIG")
+     print(squareSIG)
+     moduleq<-paste("MATCH (n:wgcna {square:'",squareSIG,"'}) RETURN DISTINCT n.name AS modulename",sep="")
+     modulenames<-cypher(graph,moduleq)
+     modulenames<-modulenames$modulename[which(modulenames$modulename!="grey")]
+     print(modulenames)
+     modulenames<-c("All",modulenames)
+     
+     print("##########################################################################################444444////")
+     
+     if(whichModuleFun()!="All"){
+        res<-res[which(res$module==whichModuleFun()),]
+     }
      
      if(whichSIGfun()!="all"){
        res2<-subset(res,logfc > sliderval3 & logfc < sliderval1 & -log10(p.adjPVAL) > sliderval4 & -log10(p.adjPVAL) < sliderval2 )
@@ -2918,7 +3008,7 @@ server <- shinyServer(function(input, output,session) {
        #theme(legend.text=element_text(size=rel(1.4))) +
        #theme(legend.key.size = unit(1,"cm")) +
        #labs(y = phenofun2()) +
-       ggtitle(paste(squareSIG,"edge:",reacedgeSIG)) +
+       ggtitle(paste(setlistSIG[[reacsetSIG]],"edge:",reacedgeSIG)) +
        theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
      }else{
         vp<-ggplot(res,aes(logfc,-log10(p.adjPVAL)))+
@@ -2945,7 +3035,7 @@ server <- shinyServer(function(input, output,session) {
            #theme(legend.text=element_text(size=rel(1.4))) +
            #theme(legend.key.size = unit(1,"cm")) +
            #labs(y = phenofun2()) +
-           ggtitle(paste(squareSIG,"edge:",reacedgeSIG)) +
+           ggtitle(paste(setlistSIG[[reacsetSIG]],"edge:",reacedgeSIG)) +
            theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
      }
      
@@ -2993,7 +3083,9 @@ server <- shinyServer(function(input, output,session) {
                     
        )
      }
-     
+     if(whichModuleFun()!="All"){
+        res<-res[which(res$module==whichModuleFun()),]
+     }
      print("original res after if ")
      print(head(res))
      
@@ -3951,52 +4043,109 @@ server <- shinyServer(function(input, output,session) {
    
    #modPheno####
    output$modPheno <- renderPlot({
-     #prefix<-paste("/home/rstudio/output/build/",buildfun(),"/",sep="")
-     prefix<-"/home/rstudio/output/build/"
-     #print("line1 inside reactive")
-     data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
-     
-     #print("line2")
-     data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
-     #print("line3")
-     squarelist<-unlist(strsplit(setfun(),"_"))
-     if(length(squarelist)==3){
-       square<-squarelist[3]
-     }else{square<-paste(squarelist[c(3,4)],collapse="_")}
-     #print("square")
-     #print(square)
-     menames<-sort(colnames(data)[2:length(colnames(data))])
-     
-     contrasts<-cypher(graph,paste("MATCH (n:wgcna {square:'",square,"'}) RETURN DISTINCT n.contrastvar AS contrastvars",sep=""))
-     c1<-contrasts$contrastvars[1]
-     c2<-contrasts$contrastvars[2]
-     
-     data0<-data0[order(data0[,c1]),][order(data0[,c2]),]
-     
-     classes<-cypher(graph,paste("MATCH (n:wgcna {square:'",square,"'}) RETURN DISTINCT n.contrast AS contrasts",sep=""))
-     #cL1<-unlist(strsplit(classes$contrasts[1],"-"))[c(2,1)]
-     #cL2<-unlist(strsplit(classes$contrasts[2],"-"))[c(2,1)]
-     #print("debug")
-     #print(classes$contrasts[1])
-     #print(classes$contrasts[2])
-     cL1<-unlist(strsplit(classes$contrasts[1]," - "))
-     cL2<-unlist(strsplit(classes$contrasts[2]," - "))
-     
-     subset1vec<-eval(parse(text=paste("data0$",c1,sep="")))
-     subset1classes<-sort(unique(subset1vec))
-     
-     subset2vec<-eval(parse(text=paste("data0$",c2,sep="")))
-     subset2classes<-sort(unique(subset2vec))
-     
-     #dev.new()
-     sub<-which(subset1vec%in%s1fun()&subset2vec%in%s2fun())
-     group1<-subset1vec[sub]
-     group2<-subset2vec[sub]
-     #print("doing res")
-     #print(data0[sub,])
-     themethod<-methodfun()
-     res<-cor.test(eval(parse(text=paste("data0$",phenofun(),"[sub]",sep=""))),eval(parse(text=paste("data0$",me1fun(),"[sub]",sep=""))),method=themethod)
-     #print("doing plot")
+      #new code
+      #square
+      #square<-set()
+      squarelist<-unlist(strsplit(setfun(),"_"))
+      if(length(squarelist)==3){
+         square<-squarelist[3]
+      }else{square<-paste(squarelist[c(3,4)],collapse="_")}
+      #pheno variabe
+      pheno<-phenofun()
+      #module
+      module<-me1fun()
+      #module<-str_split(module,"ME")[[1]][2]
+      module<-strsplit(module,"ME")[[1]][2]
+      query<-paste("MATCH (p:personPheno {square:'",square,"',name:'",pheno,"'})-[r]-(p0:person)-[r1]-(p1:personME {name:'",module,"'}) RETURN p0.name AS id,p0.class1 as class1, p0.class2 AS class2, toFloat(p.value) as var, toFloat(p1.value) as ME",sep="")
+      print(query)
+      res<-cypher(graph,query)
+      subset1vec<-factor(res$class1)
+      subset1classes<-levels(subset1vec)
+      subset2vec<-factor(res$class2)
+      subset2classes<-levels(subset2vec)
+      print("part 1 complete")
+      
+      
+     # #prefix<-paste("/home/rstudio/output/build/",buildfun(),"/",sep="")
+     # prefix<-"/home/rstudio/output/build/"
+     # #print("line1 inside reactive")
+     # data0<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples_withPheno.csv",sep=""))
+     # 
+     # #print("line2")
+     # data<-read.csv(paste(prefix,setfun(),"/5_WGCNA_4k_tv/results/ModuleEigengenes_all_samples.csv",sep=""))
+     # #print("line3")
+     # squarelist<-unlist(strsplit(setfun(),"_"))
+     # if(length(squarelist)==3){
+     #   square<-squarelist[3]
+     # }else{square<-paste(squarelist[c(3,4)],collapse="_")}
+     # #print("square")
+     # #print(square)
+     # menames<-sort(colnames(data)[2:length(colnames(data))])
+     # 
+     # contrasts<-cypher(graph,paste("MATCH (n:wgcna {square:'",square,"'}) RETURN DISTINCT n.contrastvar AS contrastvars",sep=""))
+     # c1<-contrasts$contrastvars[1]
+     # c2<-contrasts$contrastvars[2]
+     # 
+     # data0<-data0[order(data0[,c1]),][order(data0[,c2]),]
+     # 
+     # classes<-cypher(graph,paste("MATCH (n:wgcna {square:'",square,"'}) RETURN DISTINCT n.contrast AS contrasts",sep=""))
+     # #cL1<-unlist(strsplit(classes$contrasts[1],"-"))[c(2,1)]
+     # #cL2<-unlist(strsplit(classes$contrasts[2],"-"))[c(2,1)]
+     # #print("debug")
+     # #print(classes$contrasts[1])
+     # #print(classes$contrasts[2])
+     # cL1<-unlist(strsplit(classes$contrasts[1]," - "))
+     # cL2<-unlist(strsplit(classes$contrasts[2]," - "))
+     # 
+     # subset1vec<-eval(parse(text=paste("data0$",c1,sep="")))
+     # subset1classes<-sort(unique(subset1vec))
+     # 
+     # subset2vec<-eval(parse(text=paste("data0$",c2,sep="")))
+     # subset2classes<-sort(unique(subset2vec))
+     # 
+     # #dev.new()
+     # sub<-which(subset1vec%in%s1fun()&subset2vec%in%s2fun())
+     # group1<-subset1vec[sub]
+     # group2<-subset2vec[sub]
+     # #print("doing res")
+     # #print(data0[sub,])
+     # themethod<-methodfun()
+     # res<-cor.test(eval(parse(text=paste("data0$",phenofun(),"[sub]",sep=""))),eval(parse(text=paste("data0$",me1fun(),"[sub]",sep=""))),method=themethod)
+      
+      themethod<-methodfun()
+      
+      #sub<-which(subset1vec%in%levels(subset1vec)[numeric(s1fun())]&subset2vec%in%levels(subset2vec)[numeric(s2fun())])
+      s1sel<-as.numeric(s1fun())
+      s2sel<-as.numeric(s2fun())
+      toselect1<-levels(subset1vec)[s1sel]
+      toselect2<-levels(subset2vec)[s2sel]
+      print("s1sel")
+      print(s1sel)
+      print("s2sel")
+      print(s2sel)
+      print("toselect1")
+      print(toselect1)
+      print("toselect2")
+      print(toselect2)
+      
+      sub<-which(subset1vec%in%toselect1&subset2vec%in%toselect2)
+      
+      print("subset1vec")
+      print(subset1vec)
+      print("subset2vec")
+      print(subset2vec)
+      print("s1fun")
+      print(s1fun())
+      print("s2fun")
+      print(s2fun())
+      
+      print("sub")
+      print(sub)
+      print(res$var)
+      print(res$ME)
+   
+     res.cor<-cor.test(res$var[sub],res$ME[sub],method=themethod)
+     print("doing plot")
      
      #print(group1)
      #print(group2)
@@ -4014,41 +4163,49 @@ server <- shinyServer(function(input, output,session) {
      # abline(lm(eval(parse(text=paste(phenofun(),"~",me1fun(),sep=""))),data=data0[sub,]), col="red")
      # 
      
-     if(input$returnpdf==TRUE){
-       pdf("plot.pdf",width=9,height=9,onefile=FALSE)
-       plot(eval(parse(text=paste(phenofun(),"~",me1fun(),sep=""))),data=data0[sub,],pch=20,cex=2,col=unlist(strsplit(me1fun(),"ME"))[2],main=paste(me1fun(),"\nPearsonR=",sprintf("%.3f",res$estimate),"Pval=",sprintf("%.3f",res$p.value)),xlab=me1fun(),ylab=phenofun())
-       text(data0[sub,phenofun()]~data0[sub,me1fun()],labels=data0[sub,"Row.names"],col=(2*data0[sub,c1]+data0[sub,c2])-1,pos=2)
-       legend(legposfun(),sort(c(paste(cL1[1],cL2[1]),paste(cL1[1],cL2[2]),paste(cL1[2],cL2[1]),paste(cL1[2],cL2[2]))),fill=c(3,4,5,6)-1)
-       abline(lm(eval(parse(text=paste(phenofun(),"~",me1fun(),sep=""))),data=data0[sub,]), col="red")
-       
-       dev.off()
-     }
+     # if(input$returnpdf==TRUE){
+     #   pdf("plot.pdf",width=9,height=9,onefile=FALSE)
+     #   plot(eval(parse(text=paste(phenofun(),"~",me1fun(),sep=""))),data=data0[sub,],pch=20,cex=2,col=unlist(strsplit(me1fun(),"ME"))[2],main=paste(me1fun(),"\nPearsonR=",sprintf("%.3f",res$estimate),"Pval=",sprintf("%.3f",res$p.value)),xlab=me1fun(),ylab=phenofun())
+     #   text(data0[sub,phenofun()]~data0[sub,me1fun()],labels=data0[sub,"Row.names"],col=(2*data0[sub,c1]+data0[sub,c2])-1,pos=2)
+     #   legend(legposfun(),sort(c(paste(cL1[1],cL2[1]),paste(cL1[1],cL2[2]),paste(cL1[2],cL2[1]),paste(cL1[2],cL2[2]))),fill=c(3,4,5,6)-1)
+     #   abline(lm(eval(parse(text=paste(phenofun(),"~",me1fun(),sep=""))),data=data0[sub,]), col="red")
+     #   
+     #   dev.off()
+     # }
      #NEW
-     class1text<-character()
-     for (xx in 1:length(subset1vec)){
-       class1text[xx]<-rev(cL1)[subset1vec[xx]]
-     }
-     class2text<-character()
-     for (xx in 1:length(subset2vec)){
-       class2text[xx]<-rev(cL2)[subset2vec[xx]]
-     }
-     print(class1text)
-     print(class2text)
+     # class1text<-character()
+     # for (xx in 1:length(subset1vec)){
+     #   class1text[xx]<-rev(cL1)[subset1vec[xx]]
+     # }
+     # class2text<-character()
+     # for (xx in 1:length(subset2vec)){
+     #   class2text[xx]<-rev(cL2)[subset2vec[xx]]
+     # }
+     # print(class1text)
+     # print(class2text)
+     # 
+     # data0$classes<-interaction(class1text,class2text)
+     # 
      
-     data0$classes<-interaction(class1text,class2text)
-     spdata<-data0[sub,]
-     print(data0$classes)
+     # spdata<-data0[sub,]
+     # print(data0$classes)
+     res$classes<-interaction(res$class1,res$class2)
+     #spdata<-res[sub,]
+     spdata<-res[sub,]
      
-     sp<-ggplot(spdata,aes_string(me1fun(),phenofun()))+
+     #sp<-ggplot(spdata,aes_string(ME,var))+
+       sp<-ggplot(spdata,aes(ME,var))+
        geom_point(aes(col=classes),size=12,alpha=0.4)+
        geom_smooth(method=lm) + 
        geom_rug() +
-       geom_text_repel(aes(label=Row.names),data=data0[sub,],size=6) +
+       #geom_text_repel(aes(label=Row.names),data=data0[sub,],size=6) +
+       geom_text_repel(aes(label=id),data=spdata,size=6) +
        #theme_tufte() +
        theme_light() +
        #theme_minimal() +
        labs(y = phenofun()) +
-       labs(x = me1fun()) +
+       #labs(x = me1fun()) +
+       labs(x = module) +
        #labs(colour = paste("diffME edge:",edgefun())) +
        theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
        theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) + 
@@ -4218,7 +4375,10 @@ server <- shinyServer(function(input, output,session) {
      print(contrast2)
      c1<-contrast1$contrastvars[1]
      c2<-contrast2$contrastvars[1]
-     
+     print("c1")
+     print(c1)
+     print("c2")
+     print(c2)
      query<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",edgefun(),"'}) RETURN n.name as name, n.sigenrich as sigenrich, n.diffME as diffME, n.modAUC1 as modAUC1, n.modAUC2 as modAUC2, n.AIC1 as AIC1, n.AIC2 as AIC2, n.P_1 as P_1, n.P_2 as P_2, n.logit_est1 as logit_est1, n.logit_est2 as logit_est2",sep="")
      res<-cypher(graph,query)
      print(res)
@@ -4254,7 +4414,7 @@ server <- shinyServer(function(input, output,session) {
        theme(legend.title = element_text(size = rel(1.2))) +
        theme(legend.text=element_text(size=rel(1.4))) +
        theme(legend.key.size = unit(1,"cm")) +
-       labs(y = phenofun2()) +
+       #labs(y = phenofun2()) +
        ggtitle(paste(square,": Modules differentiating ",c1," and ",c2,sep="")) +
        theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
      #######E
@@ -4267,6 +4427,58 @@ server <- shinyServer(function(input, output,session) {
          print("doing the data table for wgcna")
          datatable(res)%>%formatSignif(names(res)[2:ncol(res)],3)},server = FALSE,options=list(lengthMenu = c(5, 10, 15,20,50), pageLength = 50),filter="top")
      ##
+     output$moduleTable<-renderText({
+        query1<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",edgefun(),"'}) RETURN n.name AS module",sep="")
+        modules<-cypher(graph,query1)
+        
+        df <- data.frame(matrix(ncol = 6, nrow = 0))
+        colnames(df)<-c("module","sigenrich","modAUC1","modAUC2","entity","qvalue")
+        for (module in modules$module){
+           for (entity in c("x:cellEx","x:cellprop","x:ImmunePW OR x:PalWangPW OR x:reactomePW")){
+              query<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",edgefun(),"',name:'",module,"'})
+          WITH n 
+          MATCH (n)-[r1]-(x) WHERE (",entity,")
+          WITH * ORDER BY toFloat(r1.qvalue) LIMIT 3 
+          RETURN DISTINCT n.name AS module, toFloat(n.diffME) as diffME, toFloat(n.sigenrich) as sigenrich, toFloat(n.modAUC1) as modAUC1, toFloat(n.modAUC2) as modAUC2, type(r1) AS reltype, labels(x) AS type, x.name AS entity, toFloat(r1.qvalue) as qv1, toFloat(r1.weight) AS PearsonR",sep="")
+              
+              res<-cypher(graph,query)
+              df<-rbind(df,res)
+           }
+           
+        }
+        
+        hx<-as_hux(df)
+        #hx2<-merge_repeated_rows(hx,everywhere,c("module", "diffME", "sigenrich", "modAUC1", "modAUC2"))
+        
+        width(hx) <- 0.4
+        #wrap(hx) <- TRUE
+        hx<-set_wrap(hx, everywhere, "entity", TRUE )
+        for (module in modules$module) {
+           hx<-merge_repeated_rows(hx,hx$module==module,c("module", "diffME", "sigenrich", "modAUC1", "modAUC2"))
+        }
+        
+        
+        #hx2<-merge_repeated_rows(hx,everywhere,c("module"))
+        hx3<-theme_article(hx)
+        #hx3<-theme_plain(hx2)
+        #hx3<-theme_mondrian(hx2)
+        hx4<-set_background_color(hx3,evens, 6:8,"grey95")
+        
+        hx5<-hx4 %>% map_text_color(everywhere, c("diffME"),
+                                    by_colorspace("blue","grey", "red"))
+        
+        hx6<-hx5 %>% map_text_color(everywhere, c("modAUC1","modAUC2"),
+                                    by_colorspace("grey", "red"))
+        
+        
+        #quick_html(hx6,file="/home/rstudio/output/project/tabular/moduleAnnotations.html")
+        
+        #htmlout<-read_html("/home/rstudio/output/project/tabular/moduleAnnotations.html")
+        #htmlout<-readtext("/home/rstudio/output/project/tabular/moduleAnnotations.html")
+        #htmlout$text
+        print_notebook(hx6)
+     })
+     
      
      print(vp)
      
@@ -4339,7 +4551,7 @@ server <- shinyServer(function(input, output,session) {
      query<-paste("MATCH (n:wgcna {square:'",square,"'}) RETURN n.name as name, n.diffME as diffME, n.edge AS edge",sep="")
      res<-cypher(graph,query)
      print(res)
-     
+    
      hmmat<-matrix(nrow=5,ncol=(nrow(res)/5),data=NA)
      dimnames(hmmat)<-list(1:5,unique(res$name))
      print(hmmat)
@@ -4348,11 +4560,13 @@ server <- shinyServer(function(input, output,session) {
      
      for (lines in 1:nrow(res)){
        ires<-res[lines,]
-       print(class(ires))
-       print(ires)
+       #print(class(ires))
+       #print(ires)
        hmmat[ires[[3]],as.character(ires[[1]])]<-as.numeric(ires[[2]])
        
      }
+     datasetrow<-datasetmatrix[square,]
+     rownames(hmmat)<-datasetrow
      cur_dev <- dev.cur()
      
      theheatmap<-pheatmap(hmmat,fontsize_row = 10 * factorfun(),fontsize_col = 10 * factorfun())
@@ -4401,6 +4615,9 @@ server <- shinyServer(function(input, output,session) {
        hmmat[ires[[3]],as.character(ires[[1]])]<-as.numeric(ires[[2]])
        
      }
+     datasetrow<-datasetmatrix[square,]
+     rownames(hmmat)<-datasetrow
+     
      cur_dev <- dev.cur()
      
      #theheatmap<-pheatmap(hmmat,color = colorRampPalette(RColorBrewer::brewer.pal(n = 7, name = "Reds"))(100) ,scale = "none")
@@ -4789,8 +5006,12 @@ server <- shinyServer(function(input, output,session) {
        square<-squarelist[3]
      }else{square<-paste(squarelist[c(3,4)],collapse="_")}
      if(nodefun()%in%c("reactomePW","PalWangPW","ImmunePW","cellEx")){
-       query.base=paste("MATCH (a:",nodefun(),")-[r]-(b:",nodefun2(),")",sep="")
-     }else{query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b:",nodefun2(),")",sep="")}
+       #query.base=paste("MATCH (a:",nodefun(),")-[r]-(b:",nodefun2(),")",sep="")
+       query.base=paste("MATCH (a:",nodefun(),")-[r]-(b) WHERE (b:",nodefun2(),")",sep="")
+     }else{
+        #query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b:",nodefun2(),")",sep="")
+        query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b) WHERE (b:",nodefun2(),")",sep="")
+        }
      
      print(query.base)
      nodelist<-c("a","b")
@@ -5026,6 +5247,7 @@ server <- shinyServer(function(input, output,session) {
      
      allmat2<-c()
      allmatnames<-c()
+     allmatnames_label<-c()
      #setlist<-usesets()
      #iteredges<-c(1,2,5)
      chosenSubset=subset.list[[input$subset]]
@@ -5052,7 +5274,10 @@ server <- shinyServer(function(input, output,session) {
        #row.names(smallmat)<-paste(setlist[iter],"_edge_",setstoUse,sep="")
        #print(smallmat)
        allmat2<-rbind(allmat2,smallmat)
-       allmatnames<-c(allmatnames,paste(setlist[iter],"_edge_",setstoUse,sep=""))
+       allmatnames_label<-c(allmatnames_label,paste(setlist[iter],"_edge_",setstoUse,sep=""))
+       datasetrow<-datasetmatrix[setlist[iter],]
+       allmatnames<-c(allmatnames,paste(setlist[iter],"_",datasetrow[as.numeric(setstoUse)],sep=""))
+       
        #print(allmat2[,1:4])
      }
      rownames(allmat2)<-allmatnames
@@ -5106,7 +5331,7 @@ server <- shinyServer(function(input, output,session) {
      modulelist<-colnames(allmat3)
      #cex calculation
      cexval<-2*sqrt(258/ncol(allmat3))
-     
+     cexval<-cexval*as.numeric(vlc1())
      print("debug B2")
      
      print("chosen subset")
@@ -5176,7 +5401,7 @@ server <- shinyServer(function(input, output,session) {
      print(returncsvfun())
      
        print("writing table")
-       write.csv(tableres,file.path(tabledir,paste("CMA",paste(rownames(allmat3),collapse="_"),".csv",sep="")))}#Chaussabel Module Annotation
+       write.csv(tableres,file.path(tabledir,paste("CMA",paste(allmatnames_label,collapse="_"),".csv",sep="")))}#Chaussabel Module Annotation
     
      
      
@@ -5692,7 +5917,7 @@ server <- shinyServer(function(input, output,session) {
     plotInputGigamat2()
   })
   
-  #ratioFarm
+  #ratioFarm ####
   output$ratioFarm<-renderPlot({
     usematrix<-usematrixfun()
     usematrix<-usematrix[order(usematrix[,2]),]
@@ -5714,7 +5939,11 @@ server <- shinyServer(function(input, output,session) {
       res<-cypher(graph,query)
       print(res)
       dfr[row,res$name]<-res$ratio
-      rownamesdfr<-c(rownamesdfr,paste(sq,ed,sep="_"))
+      #datasetrow<-datasetmatrix[sq,]
+      rownamesdfr<-c(rownamesdfr,paste(sq,datasetmatrix[sq,as.numeric(ed)],sep="_"))
+      
+    
+      
     }
     rownames(dfr)<-rownamesdfr
     dfr[is.na(dfr)]<-1
