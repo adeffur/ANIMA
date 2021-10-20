@@ -16,6 +16,8 @@
 #remotes::install_github("rstudio/shinymeta")
 #install.packages("ggnewscale")
 
+#install.packages("huxtable")
+
 #install.packages("reactlog")
 #library(reactlog)
 #reactlog_enable()
@@ -73,8 +75,8 @@ library(gridExtra)
 library(cowplot)
 library(dplyr)
 
-library(huxtable)
-library(textreadr)
+#library(huxtable)
+#library(textreadr)
 scripts<-system(paste("ls","/home/rstudio/scripts"),intern=TRUE)
 datafiles<-system(paste("ls",datadir),intern=TRUE)
 excl<-grep("86|393",datafiles)
@@ -342,7 +344,7 @@ load("/home/rstudio/output/build/allmodules.RData")
 # Define UI ####
 ui<-fluidPage(
   shinythemes::themeSelector(),
-              titlePanel(paste("ANIMA REGO:",project)),
+              titlePanel(paste("ANIMA:",project)),
               sidebarLayout(
                 sidebarPanel(
                   tabsetPanel(
@@ -450,7 +452,7 @@ ui<-fluidPage(
                   h4("Bipartite graphs",style="color:#32C3EE"),
                   fluidRow(
                      column(3,selectInput("nodetype_proj","Choose nodetype 1",c("wgcna","baylor","reactomePW","ImmunePW","PalWangPW","cellEx","cellprop","pheno"),selected="wgnca",multiple=FALSE)),
-                     column(3,selectInput("nodetype_proj2","Choose nodetype 2",c("wgcna","baylor","reactomePW","ImmunePW","PalWangPW","cellEx","cellprop","pheno"),selected="baylor",multiple=FALSE)),
+                     column(3,selectInput("nodetype_proj2","Choose nodetype 2",c("wgcna","baylor","reactomePW","ImmunePW","PalWangPW","cellEx","cellprop","pheno","SYMBOL"),selected="baylor",multiple=FALSE)),
                      column(3,selectInput("plotwhich","Choose which plot",c("graph"=1,"proj1"=2,"proj2"=3),multiple=FALSE))
                   ),
                   h4("igraph controls",style="color:#0000FF"),

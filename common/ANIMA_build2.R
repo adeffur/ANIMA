@@ -17,11 +17,11 @@
 #Setup####
 
   #Current date string used for versioning output
-  source("~/scripts/ANIMA_setup.R")
+  #source("~/scripts/ANIMA_setup.R")
   source("~/scripts/ANIMA_setup2.R")
   par("xpd"=FALSE)
   #WGCNA multithreading (optional)
-  enableWGCNAThreads()
+  #enableWGCNAThreads()
   #Time Zone
   Sys.setenv(TZ="Africa/Johannesburg")
   #Output folders

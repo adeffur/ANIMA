@@ -1,5 +1,5 @@
 install.packages('huxtable')
-install.packages('textreadr')
+#install.packages('textreadr')
 
 source("~/scripts/ANIMA_setup.R")
 source(file.path(dir.data_root,"questions.R")) #this is specific to the project; each project will get its own set of questions tied to specific data.
@@ -15,6 +15,7 @@ modules<-cypher(graph,query1)
 
 #modules<-modules[which(modules$module%in%c("brown","blue","turquoise")),]
 #modules<-modules[which(modules$module%in%c("green","darkgreen","turquoise")),]
+modules<-modules[which(modules$module%in%c("brown","blue","pink")),]
 
 df <- data.frame(matrix(ncol = 6, nrow = 0))
 colnames(df)<-c("module","sigenrich","modAUC1","modAUC2","entity","qvalue")
@@ -36,11 +37,11 @@ for (module in modules){
 hx<-as_hux(df)
 #hx2<-merge_repeated_rows(hx,everywhere,c("module", "diffME", "sigenrich", "modAUC1", "modAUC2"))
 
-width(hx) <- 0.4
+width(hx) <- 0.6
 #wrap(hx) <- TRUE
 hx<-set_wrap(hx, everywhere, "entity", TRUE )
-for (module in modules$module) {
-#for (module in modules) {  
+#for (module in modules$module) {
+for (module in modules) {  
   hx<-merge_repeated_rows(hx,hx$module==module,c("module", "diffME", "sigenrich", "modAUC1", "modAUC2"))
   }
 
