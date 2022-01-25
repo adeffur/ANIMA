@@ -34,6 +34,7 @@ html_to_pdf <- function(html_file, pdf_file) {
   system(cmd)
 }
 
+#Clinical characteristics####
 #get data in dataframe
 
 #blood.pcf.defpc####
@@ -74,7 +75,7 @@ table1::label(df.wide$CD4)<-"CD4 count"
 table1(~ ETHNICITY + AGE_CALC + SEX + WtLoss + NtSweat + Temp + Pulse + BPsystolic + BPdiastolic + Hb + WCC + PLT +CD4 | TB.class + HIV , data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass="Rtable1-zebra")
 table1(~ ETHNICITY + AGE_CALC + SEX + WtLoss + NtSweat + Temp + Pulse | TB.class + HIV , data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass="Rtable1-zebra")
 table1(~ BPsystolic + BPdiastolic + Hb + WCC + PLT +CD4 | TB.class + HIV , data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass="Rtable1-zebra")
-
+table1(~ ETHNICITY + SEX + AGE_CALC + CD4 | TB.class + HIV , data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass="Rtable1-zebra")
 
 #html_to_pdf("/home/rstudio/output/table1.html","/home/rstudio/output/table1.pdf")
 
@@ -195,4 +196,20 @@ df.wide[, c(5,8,9,10,11,12,13:16)] <- sapply(df.wide[, c(5,8,9,10,11,12,13:16)],
 #labels<-c("HIV","Ethnicity","Age","Sex","Weight loss","Night sweats","Temperature","Heart rate","Systolic BP","Diastolic BP","Haemoglobin","WBC count","Platelet count","CD4 count")
 table1(~ ETHNICITY + AGE_CALC + SEX + WtLoss + NtSweat + Temp + Pulse + BPsystolic + BPdiastolic + Hb + WCC + PLT +CD4 | HIV , data=df.wide, overall=F,topclass="Rtable1-zebra")
 #html_to_pdf("/home/rstudio/output/table1.html","/home/rstudio/output/table1.pdf")
+
+
+
+#Cytokines
+square<-"blood.PCF.defPC"
+query<-paste("MATCH (pr:person)-[r0]-(p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype) WHERE (v1.name IN ['Cytokine']) RETURN p.personName AS name,pr.class2 as HIV,p.name AS var,p.value AS value",sep="")
+res<-cypher(graph,query)
+df.wide <- pivot_wider(res[,1:4], names_from = var, values_from = value)
+df.wide<-df.wide %>%
+  separate(name, c("person", "compartment"), " ")
+
+
+print(colnames(df.wide))
+df.wide[, c(4:18)] <- sapply(df.wide[, c(4:18)], as.numeric)
+#labels<-c("HIV","Ethnicity","Age","Sex","Weight loss","Night sweats","Temperature","Heart rate","Systolic BP","Diastolic BP","Haemoglobin","WBC count","Platelet count","CD4 count")
+table1(~ IL.1.beta + IL.6 + IL.18 + TNF.a + IFN.gamma.y + IP.10 + IL.13 + IL.17  + IL.22 + IL.23.A + TGF.beta.1 + IL.10 + IL.8 + IL.12p70 | HIV + compartment , data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass="Rtable1-zebra")
 
