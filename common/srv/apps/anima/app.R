@@ -455,6 +455,8 @@ ui<-fluidPage(
                      column(3,selectInput("nodetype_proj2","Choose nodetype 2",c("wgcna","baylor","reactomePW","ImmunePW","PalWangPW","cellEx","cellprop","pheno","SYMBOL"),selected="baylor",multiple=FALSE)),
                      column(3,selectInput("plotwhich","Choose which plot",c("graph"=1,"proj1"=2,"proj2"=3),multiple=FALSE))
                   ),
+                  fluidRow(column(3,uiOutput("chooseVST2"),offset=.33),column(3,uiOutput("chooseVT2"),offset=.33),column(3,selectInput("bygroupselect2","choose var. group",c("all","vst","vt"),multiple = FALSE),offset=.33)),
+                  
                   h4("igraph controls",style="color:#0000FF"),
                   fluidRow(
                      column(3,selectInput("layout","Choose layout",c("layout_with_fr","layout_with_dh","layout_nicely","layout_with_gem","layout_as_bipartite"),selected="layout_with_fr",multiple=FALSE)),
@@ -841,6 +843,11 @@ server <- shinyServer(function(input, output,session) {
    fillvarfun<-reactive({input$fillvarselect})
    bygroupfun<-reactive({input$bygroupselect})
    
+   #Phenobipartite
+   phenovstfun2<-reactive({input$phenovst2})
+   phenovtfun2<-reactive({input$phenovt2})
+   bygroupfun2<-reactive({input$bygroupselect2})
+   
    #G1
    usestudy<-reactive({input$study})
    useset<-reactive({c(input$datasetsCC)})
@@ -968,8 +975,7 @@ server <- shinyServer(function(input, output,session) {
    })
    
    output$chooseVT<-renderUI({
-      
-      
+     
       query<-paste("MATCH (p:personPheno {square:'",squarephenofun(),"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT vst.name AS vst, vt. name as vt",sep="")
       groups<-cypher(graph,query)
       vst.list<-unique(groups$vst)
@@ -977,6 +983,32 @@ server <- shinyServer(function(input, output,session) {
       selectInput("phenovt","Choose VT",vt.list,selected="1",multiple=FALSE)
    })
    
+   output$chooseVST2<-renderUI({
+     squarelist<-unlist(strsplit(setfun(),"_"))
+     if(length(squarelist)==3){
+       square<-squarelist[3]
+     }else{square<-paste(squarelist[c(3,4)],collapse="_")}
+     
+     query<-paste("MATCH (p:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT vst.name AS vst, vt. name as vt",sep="")
+     groups<-cypher(graph,query)
+     vst.list2<-unique(groups$vst)
+     vt.list2<-unique(groups$vt)
+     selectInput("phenovst2","Choose VST",vst.list2,selected="1",multiple=FALSE)
+   })
+   
+   output$chooseVT2<-renderUI({
+     squarelist<-unlist(strsplit(setfun(),"_"))
+     if(length(squarelist)==3){
+       square<-squarelist[3]
+     }else{square<-paste(squarelist[c(3,4)],collapse="_")}
+     
+     
+     query<-paste("MATCH (p:personPheno {square:'",square,"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT vst.name AS vst, vt. name as vt",sep="")
+     groups<-cypher(graph,query)
+     vst.list2<-unique(groups$vst)
+     vt.list2<-unique(groups$vt)
+     selectInput("phenovt2","Choose VT",vt.list2,selected="1",multiple=FALSE)
+   })
    
    output$choosePheno<-renderUI({
      square<-squarephenofun()
@@ -3393,7 +3425,7 @@ server <- shinyServer(function(input, output,session) {
    output$dotplot1<-renderPlot({
      plotdata<-enrichfun()
      head(as.data.frame(plotdata))
-     dotplot(plotdata)
+     dotplot(plotdata,font.size=20)
      
    },height = 800)
    
@@ -4397,19 +4429,19 @@ server <- shinyServer(function(input, output,session) {
      
      #######B
      vp<-ggplot(res2,aes(modAUC2,modAUC1))+
-       geom_point(aes(col=as.numeric(diffME)),size=12,alpha=0.4)+
+       geom_point(aes(col=as.numeric(diffME)),size=12,alpha=0.7)+
        #geom_point(size=12,alpha=0.4)+
        scale_color_gradient2(low="blue",mid="lightyellow",high="red") +
        #scale_color_gradient2() +
-       geom_text_repel(aes(label=name),data=res2,size=6) +
+       geom_text_repel(aes(label=name),data=res2,size=7) +
        #theme_tufte() +
        #theme_light() +
        theme_minimal() +
-       labs(x = paste(c2,"index")) +
-       labs(y = paste(c1,"index")) +
+       labs(x = paste(c2,"AUC")) +
+       labs(y = paste(c1,"AUC")) +
        labs(colour = paste("diffME edge:",edgefun())) +
-       theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "slategrey",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
-       theme(axis.title.x = element_text(size = rel(2.5), color = "slategrey",margin = margin(t = 50, r = 50, b = 0, l = 50))) +
+       theme(axis.title.y = element_text(size = rel(2.5), angle = 90, color = "skyblue4",margin = margin(t = 0, r = 50, b = 50, l = 50))) +
+       theme(axis.title.x = element_text(size = rel(2.5), color = "skyblue4",margin = margin(t = 50, r = 50, b = 0, l = 50))) +
        theme(axis.text = element_text(size = rel(1.5))) +
        theme(aspect.ratio=1) +
        theme(legend.text = element_text(size = rel(1.2))) +
@@ -5025,10 +5057,32 @@ server <- shinyServer(function(input, output,session) {
        igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
        #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
        
-     }else{
-       query.base<-paste(query.base," WHERE toFloat(r.Rsq) > ",phenoWeightLowfun()," AND toFloat(r.Rsq) <= ",phenoWeightHighfun()," ",sep="")
+     }else if(nodefun2()=="cellprop"){
+       query.base<-paste(query.base," AND toFloat(r.Rsq) > ",phenoWeightLowfun()," AND toFloat(r.Rsq) <= ",phenoWeightHighfun()," ",sep="")
        igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
        #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+       
+     }else{
+       if(bygroupfun2()=="vt"){
+         query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b:pheno)-[rv0]-(c:personPheno)-[rv1]-(v1:varsubtype)-[rv2]-(v2:vartype {name:'",phenovtfun2(),"'})",sep="")
+         query.base<-paste(query.base," WHERE toFloat(r.Rsq) > ",phenoWeightLowfun()," AND toFloat(r.Rsq) <= ",phenoWeightHighfun()," ",sep="")
+         igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+         #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+         
+       }else if(bygroupfun2()=="vst"){
+         query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b:pheno)-[rv0]-(c:personPheno)-[rv1]-(v1:varsubtype {name:'",phenovstfun2(),"'})",sep="")
+         query.base<-paste(query.base," WHERE toFloat(r.Rsq) > ",phenoWeightLowfun()," AND toFloat(r.Rsq) <= ",phenoWeightHighfun()," ",sep="")
+         igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+         #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+         
+       }else{
+         query.base=paste("MATCH (a:",nodefun()," {square:'",square,"',edge:'",edgefun(),"'})-[r]-(b:pheno)",sep="")
+         query.base<-paste(query.base," WHERE toFloat(r.Rsq) > ",phenoWeightLowfun()," AND toFloat(r.Rsq) <= ",phenoWeightHighfun()," ",sep="")
+         igraph_plotter(query.base,nodelist,edgetrips,rimpar,csv=F,prefix=cytodir,filename=paste("modnet",square,edgeproj,nodeproj,collapse="_"),vertexsize=vertexsizefun(),legendcex=legendcexfun(),optlabel="\n",optvalue="V(ig)$edge",optchar="V(ig)$square",lay_out=eval(parse(text=layoutfun())),plot_bipartite = TRUE,plotd3=FALSE,plotwhich=plotwhichfun(),vertex.label.cex=vlc(),edgewidth=ewf())
+         #from igraphMM: igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffEX",plot=TRUE,csv=TRUE,prefix=cytodir,filename = "igraphModuleMeta",vertexsize=vertexsizefun(),legendcex=legendcexfun(),plotd3=FALSE,vertex.label.cex=vlc(),lay_out=eval(parse(text=layoutfun())))
+         
+       }
+       
        
      }
      
