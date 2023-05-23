@@ -50,6 +50,7 @@ library(WGCNA)
 #library(raster)
 
 library(plyr)
+
 library(xtable)
 
 library(DT)
@@ -74,8 +75,12 @@ library(ggradar)
 library(gridExtra)
 library(cowplot)
 library(dplyr)
+library(tidyr)
+library(huxtable)
 
-#library(huxtable)
+library(table1)
+library(kableExtra)
+
 #library(textreadr)
 scripts<-system(paste("ls","/home/rstudio/scripts"),intern=TRUE)
 datafiles<-system(paste("ls",datadir),intern=TRUE)
@@ -89,7 +94,7 @@ library(neo2R)
 
 print("HERE WE ARE")
 graph<-startGraph(graphstring,database="animadb",username="neo4j",password="anima")
-
+print("connected!!!")
 shadowtext <- function(x, y=NULL, labels, col='white', bg='black', 
                        theta= seq(0, 2*pi, length.out=50), r=0.07, ... ) {
   
@@ -131,6 +136,31 @@ for (dir in c(dir.main, dir.rdata,dir.kegg)) {
 }
 
 #Functions
+
+#function
+pvalue <- function(x, ...) {
+  # Construct vectors of data y, and groups (strata) g
+  y <- unlist(x)
+  g <- factor(rep(1:length(x), times=sapply(x, length)))
+  if (is.numeric(y)) {
+    # For numeric variables, perform a non-parametric test
+    p <- kruskal.test(y ~ g)$p.value
+  } else {
+    # For categorical variables, perform a chi-squared test of independence
+    p <- chisq.test(table(y, g))$p.value
+  }
+  # Format the p-value, using an HTML entity for the less-than sign.
+  # The initial empty string places the output on the line below the variable label.
+  #c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+  c("", sub("<", "<", format.pval(p, digits=3, eps=0.001)))
+}
+
+html_to_pdf <- function(html_file, pdf_file) {
+  cmd <- sprintf("pandoc --pdf-engine=pdflatex %s -t latex -o %s", html_file, pdf_file)
+  "pandoc reports/7/report.html -t latex -o reports/7/report.pdf"
+  system(cmd)
+}
+
 
 #R-scripts root
 dir.R.files <- file.path(dir.common, "03_Functions")
@@ -343,7 +373,7 @@ load("/home/rstudio/output/build/allmodules.RData")
   
 # Define UI ####
 ui<-fluidPage(
-  shinythemes::themeSelector(),
+  #shinythemes::themeSelector(),
               titlePanel(paste("ANIMA:",project)),
               sidebarLayout(
                 sidebarPanel(
@@ -355,7 +385,7 @@ ui<-fluidPage(
                              h3(paste('Phenotype:',project),style="color:#FF0000"),
                              fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33),column(3,uiOutput("chooseVST"),offset=.33),column(4,uiOutput("chooseVT"),offset=.33)),
                              fluidRow(column(4,uiOutput("choosePheno"),offset=.33),column(4,selectInput("fillvarselect","choose fillvar",c("class1","class2","Categories")),offset=.33),column(4,selectInput("bygroupselect","choose var. group",c("vst","vt"),multiple = FALSE),offset=.33)),
-                             fluidRow(column(4,selectInput("phenoclasses","choose classes",c("class1","class2","both")),offset=.33)),
+                             fluidRow(column(4,selectInput("phenoclasses","choose classes",c("class1","class2","both")),offset=.33),column(4,uiOutput("chooseTable1Data"),offset=.33)),
                              fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,4500,500,50),offset=.33),column(3,downloadButton("tablenumcsv", "TableNUM")
 ),column(3,downloadButton("tablecatcsv", "TableCAT")
 ))
@@ -640,6 +670,7 @@ ui<-fluidPage(
                     tabPanel("Phenotype",
                              tabsetPanel(
                                tabPanel("Subject numbers",tableOutput('subjectnumbers')),
+                               tabPanel("Table 1",tableOutput('table1')),
                                tabPanel("allData",DT::dataTableOutput('allphenodata')),
                                tabPanel("table_NUM",DT::dataTableOutput('tableNUM')),
                                tabPanel("table_NUM2",tableOutput('tableNUM2')),
@@ -842,6 +873,8 @@ server <- shinyServer(function(input, output,session) {
    phenovtfun<-reactive({input$phenovt})
    fillvarfun<-reactive({input$fillvarselect})
    bygroupfun<-reactive({input$bygroupselect})
+   tab1varfun<-reactive({input$table1vars})
+   
    
    #Phenobipartite
    phenovstfun2<-reactive({input$phenovst2})
@@ -972,6 +1005,16 @@ server <- shinyServer(function(input, output,session) {
       vst.list<-unique(groups$vst)
       vt.list<-unique(groups$vt)
       selectInput("phenovst","Choose VST",vst.list,selected="1",multiple=FALSE)
+   })
+   
+   output$chooseTable1Data<-renderUI({
+     
+     
+     query<-paste("MATCH (p:personPheno {square:'",squarephenofun(),"'})-[r]-(vst:varsubtype)-[r2]-(vt:vartype) RETURN DISTINCT vst.name AS vst, vt. name as vt",sep="")
+     groups<-cypher(graph,query)
+     vst.list<-unique(groups$vst)
+     vt.list<-unique(groups$vt)
+     selectInput("table1vars","Choose T1 vars",vst.list,selected="1",multiple = TRUE)
    })
    
    output$chooseVT<-renderUI({
@@ -1381,6 +1424,130 @@ server <- shinyServer(function(input, output,session) {
    
    output$allphenodata<-renderDataTable(allphenofun(),filter="top")
    
+   
+   table1fun<-reactive({
+     #print(questions)
+     square<-squarephenofun()
+     #print(str(pData(eval(parse(text=square)))))
+     print(paste("questions$",square,"$matrixPDname[[1]]",sep=""))
+     filename<-eval(parse(text=(paste("questions$",square,"$matrixPDname[[1]]",sep=""))))
+     mpd<-read.csv(file.path("/home/rstudio/source_data",filename),row.names=1,stringsAsFactors = FALSE)
+     varclass<-mpd["varclass",]
+     print(varclass)
+     numerics<-which(varclass=="n")
+     factors<-which(varclass=="c")
+     df<-pData(eval(parse(text=square)))
+     df[,numerics]<-sapply(df[,numerics], as.numeric)
+     df[,factors]<-sapply(df[,factors], as.factor)
+     
+     #df<-Filter(function(x) !(all(x=="")), df)
+     
+     DT <- as.data.table(df)
+     DT[,which(unlist(lapply(DT, function(x)!all(is.na(x))))),with=F]
+     
+     square<-squarephenofun()
+     selectVSTs<-tab1varfun()
+     print(square)
+     print(selectVSTs)
+     vstvec<-paste(selectVSTs,sep="','",collapse="','")
+     print(vstvec)
+     
+     queryA<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",1,"'}) RETURN DISTINCT n.contrastvar as cv1",sep="")
+     print(queryA)
+     res1<-cypher(graph,queryA)
+     con1<-as.character(res1$cv1)
+     
+     queryB<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",3,"'}) RETURN DISTINCT n.contrastvar as cv2",sep="")
+     res2<-cypher(graph,queryB)
+     con2<-as.character(res2$cv2)
+     
+     print(con1)
+     print(con2)
+     print(df[,1:12])
+     queryC<-paste("MATCH (p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype) WHERE (v1.name IN ['",vstvec,"']) RETURN DISTINCT p.name AS var",sep="")
+     res3<-cypher(graph,queryC)
+     vars<-as.character(res3$var)
+     
+     select<-c(con1,con2,vars)
+     print("selecting table 1 variables and the two contrasts relevant to the square")
+     print(select)
+     print(colnames(df))
+     datasubset<-df[,select]
+     
+    #  #query<-paste("MATCH (pr:person)-[r0]-(p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype)-[r2]-(v2:vartype) WHERE (v1.name IN ['",vstvec,"'] AND p.personName =~ '.*?blood') RETURN p.personName AS name,p.name AS var,p.value AS value, v1.name AS vst, v2.name AS VT",sep="")
+    #  query<-paste("MATCH (pr:person)-[r0]-(p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype)-[r2]-(v2:vartype) WHERE (v1.name IN ['",vstvec,"']) RETURN p.personName AS name,p.name AS var,p.value AS value, v1.name AS vst, v2.name AS VT",sep="")
+    #  
+    #  print(query)
+    #  res<-cypher(graph,query)
+    #  print(res)
+    #  df.wide <- pivot_wider(res[,1:4], names_from = var, values_from = value)
+    #  
+    #  print(paste("questions$",square,"$matrixPDname[[1]]",sep=""))
+    #  filename<-eval(parse(text=(paste("questions$",square,"$matrixPDname[[1]]",sep=""))))
+    #  mpd<-read.csv(file.path("/home/rstudio/source_data",filename),row.names=1,stringsAsFactors = FALSE)
+    #  varclass<-mpd["varclass",]
+    #  print(varclass)
+    #  
+    #  numerics<-which(varclass=="n")
+    #  numericlist<-colnames(mpd)[numerics]
+    #  print(numericlist)
+    #  
+    #  factors<-which(varclass=="c")
+    #  faclist<-colnames(mpd)[factors]
+    #  
+    #  myNumerics<-colnames(df.wide)[which(colnames(df.wide)%in%numericlist)]
+    #  myFactors<-colnames(df.wide)[which(colnames(df.wide)%in%faclist)]
+    # 
+    #  print(myNumerics)
+    #  print(myFactors)
+    #  
+    #  df.wide[,myNumerics]<-lapply(df.wide[,myNumerics],as.numeric)
+    #  
+    #  df.wide[,myFactors]<-lapply(df.wide[,myFactors],as.factor)
+    #  print(str(df.wide))
+    #  
+    df.wide<-datasubset
+    print(df.wide)
+    
+    for (iterator in colnames(df.wide)) {
+      print(iterator)
+      expr<-paste("table1::label(df.wide$",as.character(iterator),")<-iterator",sep="")
+      print(expr)
+      eval(parse(text=expr))
+
+      }
+    #table1(df.wide,labels(df.wide))
+    
+    
+    #classes
+    byClass<-classesfun()
+    if (byClass=="class1"){
+      strat<-con1
+    }else if (byClass=="class2"){
+      strat<-con2
+    }else{
+      strat<-paste(con1,con2,sep="*")
+    } 
+    
+    #t1expr<-paste("table1(~ ",paste(colnames(df.wide)[-c(1,2)],collapse=" + "), "| ", paste(con1,con2,sep=" + "), ", data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass='Rtable1-zebra')",sep="")
+    print(df.wide)
+    df.wide <- df.wide[,colSums(is.na(df.wide))<nrow(df.wide)]
+    t1expr<-paste("table1(~ ",paste(colnames(df.wide)[-c(1,2)],collapse=" + "), "| ", strat, ", data=df.wide, overall=F, extra.col=list(`P-value`=pvalue),topclass='Rtable1-zebra')",sep="")
+    
+    
+    print(t1expr)
+    
+    t1<-eval(parse(text=t1expr))
+    t2<-t1kable(t1)
+    print(str(t2))
+    t2
+
+    })
+   
+   output$table1<-renderText(table1fun())
+   
+   
+   
    output$code<-renderPrint({
       expandChain(
          #Preparing the plot
@@ -1507,8 +1674,15 @@ server <- shinyServer(function(input, output,session) {
                   stats<-"fail"
                   
                   try(stats<-kruskal.test(value~class2,data=data))
+                  print("debug5.1 - stats output")
+                  print(stats)
+                  print(stats[1]!="fail")
+                  print("class2names")
+                  print(class2names)
+                  print(length(class2names))
+                  print("end debug 5.1")
                   
-                  if(stats!="fail"&length(class2names)==2){
+                  if(stats[1]!="fail"&length(class2names)==2){
                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else if(length(class2names)==1) {
                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
@@ -1541,7 +1715,7 @@ server <- shinyServer(function(input, output,session) {
                   stats<-"fail"
                   
                   try(stats<-kruskal.test(value~class2,data=dataS1))
-                  if(stats!="fail"){
+                  if(stats[1]!="fail"){
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else{
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
@@ -1573,7 +1747,7 @@ server <- shinyServer(function(input, output,session) {
                   stats<-"fail"
                   
                   try(stats<-kruskal.test(value~class2,data=dataS2))
-                  if(stats!="fail"){
+                  if(stats[1]!="fail"){
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else{
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
@@ -1615,7 +1789,7 @@ server <- shinyServer(function(input, output,session) {
                         grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
                         
                         count2<-count2+1
-                        if(stats!="fail"&length(class2names)==2){
+                        if(stats[1]!="fail"&length(class2names)==2){
                            table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
                         }else if(length(class2names)==1){
                            table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
@@ -1754,7 +1928,7 @@ server <- shinyServer(function(input, output,session) {
                   
                   try(stats<-kruskal.test(value~class2,data=data))#EDIT1
                   
-                  if(stats!="fail"&length(class2names)==2){
+                  if(stats[1]!="fail"&length(class2names)==2){
                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else if(length(class2names)==1) {
                      table1num[count,]<-c(vt,vst,var,alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],NA,NA,NA,"NA",NA)
@@ -1787,7 +1961,7 @@ server <- shinyServer(function(input, output,session) {
                   stats<-"fail"
                   
                   try(stats<-kruskal.test(value~class2,data=dataS1))
-                  if(stats!="fail"){
+                  if(stats[1]!="fail"){
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else{
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[1],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
@@ -1819,7 +1993,7 @@ server <- shinyServer(function(input, output,session) {
                   stats<-"fail"
                   
                   try(stats<-kruskal.test(value~class2,data=dataS2))
-                  if(stats!="fail"){
+                  if(stats[1]!="fail"){
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],stats$method,stats$p.value)
                   }else{
                      table1num[count,]<-c(vt,vst,paste(var,splitclasses[2],sep="."),alln,allmed,alliqr,sum[1,2],sum[1,3],sum[1,4],sum[2,2],sum[2,3],sum[2,4],"NA",NA)
@@ -1857,7 +2031,7 @@ server <- shinyServer(function(input, output,session) {
                         grp2<-paste(paste(ftdf2$value,sprintf("%.2f",ftdf2$Freq),sep=":"),collapse="__")
                         
                         count2<-count2+1
-                        if(stats!="fail"&length(class2names)==2){
+                        if(stats[1]!="fail"&length(class2names)==2){
                            table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,stats$method,stats$p.value)
                         }else if(length(class2names)==1){
                            table1cat[count2,]<-c(vt,vst,var,alln,grp1,grp2,"NA",NA)
@@ -3626,7 +3800,7 @@ server <- shinyServer(function(input, output,session) {
      igr<-"FAIL"
      try(igr<-igraph_plotter(query.base,nodelist,edgetrips,rimpar="diffME",plot=FALSE,csv=TRUE,prefix=cytodir,filename = "igraphwgcna",plotd3=FALSE,return_graph=TRUE))
      print(class(igr))
-     if(igr=="FAIL"){
+     if(class(igr)!="character"){
        #query
        query.base<-paste("MATCH (n:wgcna {square:'",square,"',edge:'",edgefun(),"',name:'",unlist(strsplit(me1fun(),"ME"))[2],"'})-[r2]-(x2) WHERE (x2:cellEx OR x2:cellprop OR x2:reactomePW OR x2:ImmunePW OR x2:pheno OR x2:PalWangPW)",sep="")
        #print(query.base)
@@ -3925,6 +4099,8 @@ server <- shinyServer(function(input, output,session) {
      res.pw4<-t(res.pw3c$SIG)
      
      colnames(res.pw4)<-rownames(res.pw3c)
+     print("res.pw4")
+     print(res.pw4)
      plot4<-ggradar(res.pw4,grid.max=10,grid.min=0, grid.mid=5,values.radar = c("0","5","10"),plot.title = "pathway sig",axis.label.size = 2)}else{plot4<-ggtext("NOTHING")}
      
      #####
@@ -4742,19 +4918,22 @@ server <- shinyServer(function(input, output,session) {
      
      intracor2<-data.frame()
      for (name in phenovec){
-       #print(name)
+       print(name)
        res<-"Skip"
        bloodvec<-eval(parse(text=paste("pdatablood$",name,sep="")))
        fluidvec<-eval(parse(text=paste("pdatafluid$",name,sep="")))
+       print("identical(bloodvec,fluidvec)")
+       print(!identical(bloodvec,fluidvec))
        if(!identical(bloodvec,fluidvec)){
        try(res<-cor.test(bloodvec,fluidvec,method="p"))
        }
        # plot(eval(parse(text=paste("data.blood$",name,sep=""))),eval(parse(text=paste("data.fluid$",name,sep=""))),col=unlist(strsplit(name,"ME"))[2],main=paste(name,"\nPearsonR=",sprintf("%.3f",res$estimate),"Pval=",sprintf("%.3f",res$p.value)),pch=19,xlab="Blood",ylab="Fluid",xlim=c(-0.25,0.25),ylim=c(-0.25,0.25))
        # abline(lm(eval(parse(text=paste("data.blood$",name,sep="")))~eval(parse(text=paste("data.fluid$",name,sep="")))), col="red")
        # print(name)
-       #print("here is a res2")
-       #print(res)
-       if(res!="Skip"){
+       print("here is a res2")
+       print(res)
+       print(class(res))
+       if(class(res)!="character"){
        intracor2<-rbind(intracor2,c(name,res$estimate,res$p.value))
        }
      }
@@ -5317,7 +5496,12 @@ server <- shinyServer(function(input, output,session) {
        print(class(usematrixiter))
        print(usematrixiter)
        setstoUse<-NA
-       if(class(usematrixiter)=="matrix"){
+       print("new debug")
+       print("class usematrixiter")
+       print(class(usematrixiter))
+       #ew code
+       #if(class(usematrixiter)=="matrix"){
+       if(class(usematrixiter)[1]=="matrix"){
          setstoUse<-as.character(usematrixiter[,2])
        }else if (class(usematrixiter)=="integer"){setstoUse<-as.character(usematrixiter[2])}
        print("setstoUse")

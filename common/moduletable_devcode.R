@@ -169,3 +169,24 @@ hx5<-hx3 %>% map_text_color(everywhere, c("qval"),
 
 quick_html(hx5,file="/home/rstudio/output/consensusBlood_hx.html")
 
+#PTB_TB-PC
+data<-read.csv("~/output/project/tabular/CMAPTB.TBPC_edge_1_PTB.TBPC_edge_2.csv")
+hx<-as_hux(data[,2:5])
+#hx2<-merge_repeated_rows(hx,everywhere,c("module", "diffME", "sigenrich", "modAUC1", "modAUC2"))
+
+
+hx<-merge_repeated_rows(hx,everywhere,"modname")
+
+
+
+#hx2<-merge_repeated_rows(hx,everywhere,c("module"))
+hx3<-theme_article(hx)
+#hx3<-theme_plain(hx2)
+#hx3<-theme_mondrian(hx2)
+#hx4<-set_background_color(hx3,evens, 2:4,"grey95")
+
+hx5<-hx3 %>% map_text_color(everywhere, c("qval"),
+                            by_colorspace("red","grey", "blue"))
+
+quick_html(hx5,file="/home/rstudio/output/project/tabular/PTB-TBPC_hx.html")
+

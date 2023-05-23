@@ -6,7 +6,7 @@
 #FROM rocker/verse:devel
 FROM thomasweise/texlive:latest
 #FROM rocker/verse:latest
-FROM rocker/verse:4.0.3
+FROM rocker/verse:4.2.0
 #FROM rocker/verse:4.0.0
 #FROM rocker/ml:latest
 
@@ -16,71 +16,20 @@ MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
 #Environment for timeout
 ENV R_DEFAULT_INTERNET_TIMEOUT 1200
 
-# Add from rocker/tensorflow dockerfile
-# 
-# ENV WORKON_HOME /opt/virtualenvs
-# ENV PYTHON_VENV_PATH $WORKON_HOME/r-tensorflow
-# 
-# # Set up a user modifyable python3 environment
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#         libpython3-dev \
-#         python3-venv && \
-#     rm -rf /var/lib/apt/lists/*
-# 
-# RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
-# 
-# RUN python3 -m venv ${PYTHON_VENV_PATH}
-# 
-# RUN chown -R rstudio:rstudio ${WORKON_HOME}
-# ENV PATH ${PYTHON_VENV_PATH}/bin:${PATH}
-# # And set ENV for R! It doesn't read from the environment...
-# RUN echo "PATH=${PATH}" >> /usr/local/lib/R/etc/Renviron && \
-#     echo "WORKON_HOME=${WORKON_HOME}" >> /usr/local/lib/R/etc/Renviron && \
-#     echo "RETICULATE_PYTHON_ENV=${PYTHON_VENV_PATH}" >> /usr/local/lib/R/etc/Renviron
-# 
-# # Because reticulate hardwires these PATHs...
-# RUN ln -s ${PYTHON_VENV_PATH}/bin/pip /usr/local/bin/pip && \
-#     ln -s ${PYTHON_VENV_PATH}/bin/virtualenv /usr/local/bin/virtualenv
-# 
-# # install as user to avoid venv issues later
-# USER rstudio
-# RUN pip3 install \
-#     h5py \
-#     pyyaml \
-#     requests \
-#     Pillow \
-#     tensorflow==1.13.1 \
-#     tensorflow \
-#     tensorflow-probability \
-#     keras \
-#     --no-cache-dir
-# USER root
-# RUN install2.r -r http://r.adu.org.za/ reticulate tensorflow keras
-# 
-# Add from rocker/ml Dockerfile
-# 
-# Python Xgboost for CPU
-# USER rstudio
-# RUN pip3 --no-cache-dir install \
-#     xgboost==0.81 \
-#     wheel==0.33.0 \
-#     setuptools==40.8.0 \
-#     scipy==1.2.1
-# USER root
 
-## Get Java (for h2o R package)
-RUN apt-get update -qq \
-  && apt-get -y --no-install-recommends install \
-    cmake \
-    default-jdk \
-    default-jre \
-  && R CMD javareconf
+# ## Get Java (for h2o R package)
+# RUN apt-get update -qq \
+#   && apt-get -y --no-install-recommends install \
+#     cmake \
+#     default-jdk \
+#     default-jre \
+#   && R CMD javareconf
 
 ## h2o requires Java
 #RUN install2.r -r http://r.adu.org.za/ h2o future coda
-RUN install2.r h2o future coda
+#RUN install2.r h2o future coda
 #RUN install2.r greta
-RUN installGithub.r greta-dev/greta
+#RUN installGithub.r greta-dev/greta
 
 #continue with anima libraries
 
@@ -93,7 +42,7 @@ ENV LANG en_US.UTF-8
 RUN rm -rf /tmp/*.rds \
 && install2.r --error \
     -r https://cran.mirror.ac.za \
-    -r http://r.adu.org.za \
+    #-r http://r.adu.org.za \
     -r http://cran.rstudio.com \
     #-r http://www.omegahat.org/R \
     -r http://datacube.wu.ac.at \
@@ -108,7 +57,7 @@ RUN rm -rf /tmp/*.rds \
     ROCR \
     aod \
     cowplot \
-    heatmap.plus \
+    #heatmap.plus \
     dunn.test \
     DT \
     networkD3 \
@@ -120,50 +69,9 @@ RUN rm -rf /tmp/*.rds \
     neo2R \
     psych \
     reactlog \
+    UpSetR \
+    vcfR \
 && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
-
-
-## LaTeX ---------------------------------------------------------------------------
-
-#install beamer
-##### TEX related ########
-# N.B: texlive-base may prompt a question about default paper size for applications
-# setting DEBIAN_FRONTEND=noninteractive  force a default choice
-
-#RUN DEBIAN_FRONTEND=noninteractive dpkg --purge --force-depends texlive-lang-other texlive-latex-extra tex-common texlive-fonts-recommended texlive-pictures texlive-metapost
-#RUN DEBIAN_FRONTEND=noninteractive apt -y --fix-broken install
-#RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -f texlive-lang-other texlive-latex-extra tex-common texlive-fonts-recommended texlive-pictures texlive-metapost
-
-#RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -f texlive-base texlive-lang-other texlive-latex-extra tex-common texlive-fonts-recommended texlive-pictures texlive-metapost
-#RUN DEBIAN_FRONTEND=noninteractive mktexlsr
-#RUN DEBIAN_FRONTEND=noninteractive updmap-sys 
-
-#RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-#  texlive-base
-  
-#RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \  
-  #dvipng \
-  #ghostscript \
-  #texinfo \
-  #texlive-extra-utils \
-  #texlive-fonts-recommended \
-  #texlive-generic-recommended \
-  #texlive-latex-base \
-  #texlive-latex-recommended
-
-## attempt at using custom texlive
-#RUN apt-get install -y --no-install-recommends lmodern xzdec
-# fix tlmgr which does not has correct exit status
-#RUN tlmgr update --self
-
-#RUN tlmgr init-usertree --usertree /usr/local/share/texmf/; true
-
-#RUN tlmgr --usertree /usr/local/share/texmf/ install \
-#      acronym background bigfoot blindtext cleveref enumitem etoolbox everypage \
-#      floatrow framed beamer translator \
-#      inconsolata pgf multirow preprint soul titling xstring && \
-#    texhash && updmap-sys
-
 
 #udunits
 RUN apt-get update
@@ -190,7 +98,7 @@ RUN Rscript -e 'install.packages("BiocManager")'
 
 RUN Rscript -e 'BiocManager::install();bio<-c("ReactomePA","Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");BiocManager::install(bio,timeout=1200)' 
 
-#RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite();bio<-c("Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");biocLite(bio)' \
+#RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite();bio<-c("Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3","maftools","VariantAnnotation","TVTB");biocLite(bio)' \
 #&& rm -rf /tmp/downloaded_packages /tmp/*.rds
 
 #install more from CRAN

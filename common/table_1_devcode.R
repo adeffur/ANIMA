@@ -1,4 +1,4 @@
-install.packages("table1")
+#install.packages("table1")
 library(table1)
 #library(dplyr)
 # 0. Initialize
