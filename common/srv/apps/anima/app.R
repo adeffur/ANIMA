@@ -92,8 +92,11 @@ source("/home/rstudio/source_data/setlist.R",local=TRUE)
 library(neo2R)
 #graph<-startGraph(graphstring)#!!!!! note the address!!
 
+graphstring<-"host.docker.internal:8474/db/data/"
+
 print("HERE WE ARE")
 graph<-startGraph(graphstring,database="animadb",username="neo4j",password="anima")
+
 print("connected!!!")
 shadowtext <- function(x, y=NULL, labels, col='white', bg='black', 
                        theta= seq(0, 2*pi, length.out=50), r=0.07, ... ) {
@@ -385,7 +388,7 @@ ui<-fluidPage(
                              h3(paste('Phenotype:',project),style="color:#FF0000"),
                              fluidRow(column(4,uiOutput("choosesquarePheno"),offset=.33),column(3,uiOutput("chooseVST"),offset=.33),column(4,uiOutput("chooseVT"),offset=.33)),
                              fluidRow(column(4,uiOutput("choosePheno"),offset=.33),column(4,selectInput("fillvarselect","choose fillvar",c("class1","class2","Categories")),offset=.33),column(4,selectInput("bygroupselect","choose var. group",c("vst","vt"),multiple = FALSE),offset=.33)),
-                             fluidRow(column(4,selectInput("phenoclasses","choose classes",c("class1","class2","both")),offset=.33),column(4,uiOutput("chooseTable1Data"),offset=.33)),
+                             fluidRow(column(4,selectInput("phenoclasses","choose classes",c("class1","class2","both")),offset=.33),column(4,selectInput("filterpheno","remove fluid",c("yes","no")),offset=.33),column(4,uiOutput("chooseTable1Data"),offset=.33)),
                              fluidRow(column(4,sliderInput("phenoplotheight","phenoplotheight",500,4500,500,50),offset=.33),column(3,downloadButton("tablenumcsv", "TableNUM")
 ),column(3,downloadButton("tablecatcsv", "TableCAT")
 ))
@@ -801,7 +804,7 @@ server <- shinyServer(function(input, output,session) {
    # Store in a convenience variable
    cdata <- session$clientData
    
-   
+   graphstring<-"host.docker.internal:8474/db/data/"
    #libraries
   #library(RNeo4j)
    library(neo2R)
@@ -869,6 +872,8 @@ server <- shinyServer(function(input, output,session) {
    phenofun2<-reactive({input$phenochoice})
    phenoplotheightfun<-reactive({input$phenoplotheight})
    classesfun<-reactive({input$phenoclasses})
+   filterphenofun<-reactive({input$filterpheno})
+   
    phenovstfun<-reactive({input$phenovst})
    phenovtfun<-reactive({input$phenovt})
    fillvarfun<-reactive({input$fillvarselect})
@@ -1473,6 +1478,9 @@ server <- shinyServer(function(input, output,session) {
      print(select)
      print(colnames(df))
      datasubset<-df[,select]
+     if(con1=="Compartment"&filterphenofun()=="yes"){
+       datasubset<-datasubset[which(datasubset$Compartment=="blood"),]
+     }
      
     #  #query<-paste("MATCH (pr:person)-[r0]-(p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype)-[r2]-(v2:vartype) WHERE (v1.name IN ['",vstvec,"'] AND p.personName =~ '.*?blood') RETURN p.personName AS name,p.name AS var,p.value AS value, v1.name AS vst, v2.name AS VT",sep="")
     #  query<-paste("MATCH (pr:person)-[r0]-(p:personPheno {square:'",square,"'})-[r]-(v1:varsubtype)-[r2]-(v2:vartype) WHERE (v1.name IN ['",vstvec,"']) RETURN p.personName AS name,p.name AS var,p.value AS value, v1.name AS vst, v2.name AS VT",sep="")
@@ -2151,9 +2159,10 @@ server <- shinyServer(function(input, output,session) {
            sol2<-"not done"
            print("sol2 not done")
         }
-        
+      print("sol")
+       print(sol)
        
-       if(sol=="not done"){
+       if(class(sol)=="character"){
           
           print(KWT_class2)
           KWT<-KWT_class2
@@ -2161,7 +2170,7 @@ server <- shinyServer(function(input, output,session) {
           colnames(sol2)[1]<-"Class"
           solcom<-sol2
           
-       }else if(sol2=="not done"){
+       }else if(class(sol2)=="character"){
           print(KWT_class1)
           KWT<-KWT_class1
           colnames(KWT)<-c("class1")
@@ -2195,8 +2204,9 @@ server <- shinyServer(function(input, output,session) {
          
        )
        
-       
+       print("debug complevs")
        complevs<-eval(parse(text=paste("levels(as.factor(data$","Categories","))",sep="")))
+       print(complevs)
        if (length(complevs)==4){
           my_comparisons <- list( c(complevs[1], complevs[2]),c(complevs[1], complevs[3]),c(complevs[2], complevs[4]),c(complevs[3], complevs[4]) )
        }else{
@@ -2557,10 +2567,10 @@ server <- shinyServer(function(input, output,session) {
          theme(legend.text = element_text(size = rel(1.2))) +
          theme(legend.title = element_text(size = rel(1.2))) +
          theme(legend.text=element_text(size=rel(1.4))) +
-         theme(legend.key.size = unit(1,"cm")) +
-         labs(y = phenofun2()) +
-         ggtitle(paste(phenofun2(),"by class")) +
-         theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
+         theme(legend.key.size = unit(1,"cm"))# +
+         #labs(y = phenofun2()) +
+         #ggtitle(paste(phenofun2(),"by class")) +
+         #theme(plot.title = element_text(size=rel(2.5),hjust = 0.5,color="maroon"))
       
       
       

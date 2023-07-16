@@ -1,0 +1,192 @@
+##Start with latest rocker/verse image
+
+FROM rocker/shiny-verse:4.2.2
+
+#This is me
+MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
+
+#Environment for timeout
+ENV R_DEFAULT_INTERNET_TIMEOUT 1200
+
+## Add RStudio binaries to PATH
+ENV PATH /usr/lib/rstudio-server/bin/:$PATH 
+ENV LANG en_US.UTF-8
+
+#install cmake
+
+RUN apt-get update
+
+RUN apt-get install -y \
+    cmake
+
+############ install CRAN packages ######################################################
+      
+    
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \    
+    doBy \
+   
+    
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds    
+    
+    
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \    
+    
+    
+    
+    gmodels \
+    ROCR \
+    aod \
+    cowplot \
+    #heatmap.plus \
+    dunn.test \
+    DT \
+    networkD3 \
+    tm \
+    wordcloud \
+    shinycssloaders \
+    ggpubr \
+    shinythemes \
+    neo2R \
+    psych \
+    reactlog \
+    UpSetR \
+    quincunx \
+    combinat \
+    xlsx \
+    TCGAretriever \
+    kableExtra \
+    data.table \
+    stringr \
+    vcfR \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+#udunits
+RUN apt-get update
+
+RUN apt-get install -y \
+    libudunits2-0 \
+    libudunits2-dev
+
+#install more from CRAN
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r http://r.adu.org.za \ 
+    -r http://cran.rstudio.com \
+    udunits2 \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+####checked packages
+
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \
+    gplots \
+    VennDiagram \
+    pwr \
+    mail \
+    clusterRepro \
+   
+     
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds  
+
+
+
+################# Bioconductor ########################################################
+
+#FROM bioconductor/bioconductor_docker:devel
+ENV R_DEFAULT_INTERNET_TIMEOUT=1200
+
+#bioconductor packages
+RUN Rscript -e 'install.packages("BiocManager")'
+
+RUN Rscript -e 'bio<-c("Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","VariantAnnotation","myvariant","cBioPortalData","data.tree","mutSignatures","IRanges","GenomicRanges","BSgenome","GenomeInfoDb","maftools","VariantAnnotation","myvariant","TVTB","TCGAbiolinks","BSgenome.Hsapiens.UCSC.hg19","SummarizedExperiment");\
+BiocManager::install(bio)' \
+#&& rm -rf /tmp/downloaded_packages /tmp/*.rds
+
+
+##############################   From GitHub   #################################
+#RUN Rscript -e 'devtools::install_github("nicolewhite/RNeo4j")' \
+#&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("rstudio/shinymeta",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("VariantEffect/hgvsParseR",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'remotes::install_github("kpjonsson/annotate-maf",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("dami82/mutSignatures", force = TRUE, build_vignettes = TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+######### OOmpa packages ##############################
+#RUN Rscript -e 'source("http://bioinformatics.mdanderson.org/OOMPA/oompaLite.R");oompaLite()' \
+
+RUN Rscript -e 'setRepositories(graphics=FALSE, ind=c(1,4)); myRepos <- c(getOption("repos"),getOption("BioC_mirror"),OOMPA="http://bioinformatics.mdanderson.org/OOMPA/3.0");install.packages(repos=myRepos,"lite")' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+####### CellMix #######################################
+
+RUN Rscript -e 'install.packages("BiocInstaller", repos="http://bioconductor.org/packages/2.13/bioc")' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'BiocManager::install("CellMix",site_repository = "http://web.cbio.uct.ac.za/~renaud/CRAN",update=FALSE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+##edit 1
+
+RUN Rscript -e 'devtools::install_github("ricardo-bion/ggradar",dependencies = TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+##edit 2
+
+RUN Rscript -e 'bio<-c("preprocessCore");\
+BiocManager::install(bio)' \
+&& rm -rf /tmp/downloaded_packages /tmp/*.rds
+
+#install git
+
+RUN apt-get update
+
+RUN apt-get install -y \
+    git-all
+
+
+RUN git clone https://github.com/bmbolstad/preprocessCore.git \
+&& cd preprocessCore \
+&& R CMD INSTALL --configure-args="--disable-threading"  
+
+##edit 3
+
+#More CRAN
+
+#install more from CRAN
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r http://r.adu.org.za \ 
+    -r http://cran.rstudio.com \
+    huxtable \
+    igraph \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
+RUN Rscript -e 'bio<-c("lumi","VariantAnnotation");\
+BiocManager::install(bio)' \
+#&& rm -rf /tmp/downloaded_packages /tmp/*.rds

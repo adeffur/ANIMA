@@ -1,0 +1,278 @@
+##Start with latest ROpenSci image
+##This Dockerfile inspired by rocker/hadleyverse and rocker/ropensci Dockerfiles as we are extending ropensci
+
+
+#FROM rocker/verse:latest
+#FROM rocker/verse:devel
+#FROM thomasweise/texlive:latest
+#FROM rocker/verse:latest
+#FROM rocker/shiny-verse:4.0.3
+#FROM rocker/verse:4.0.0
+#FROM rocker/ml:latest
+
+
+FROM rocker/ml-verse:4.1.1
+#FROM rocker/shiny-verse:4.1.1
+
+#This is me
+MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
+
+#Environment for timeout
+ENV R_DEFAULT_INTERNET_TIMEOUT 1200
+
+#RcppEigen
+RUN apt-get update
+RUN apt install -y \
+	r-cran-rcppeigen
+
+#continue with anima libraries ----------------------------------------------------
+
+## Add RStudio binaries to PATH
+ENV PATH /usr/lib/rstudio-server/bin/:$PATH 
+ENV LANG en_US.UTF-8
+
+
+#install CRAN packages [1]
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \
+    gplots \
+    VennDiagram \
+    pwr \
+    mail \
+    clusterRepro \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds    
+    
+#install CRAN packages [2]
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \    
+    doBy \
+    gmodels \
+    ROCR \
+    aod \
+    cowplot \
+    #heatmap.plus \
+    dunn.test \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds    
+    
+#install CRAN packages [3]
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \    
+    DT \
+    networkD3 \
+    #tm \
+    #wordcloud \
+    shinycssloaders \
+    ggpubr \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+    
+#install CRAN packages [4]
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r https://cran.mirror.ac.za \
+    #-r http://r.adu.org.za \
+    -r http://cran.rstudio.com \
+    #-r http://www.omegahat.org/R \
+    -r http://datacube.wu.ac.at \
+    -r http://packages.ropensci.org \    
+    shinythemes \
+    neo2R \
+    psych \
+    reactlog \
+    huxtable \
+    table1 \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
+## LaTeX ---------------------------------------------------------------------------
+
+#udunits
+
+
+RUN apt-get install -y \
+    libudunits2-0 \
+    libudunits2-dev
+
+#install more from CRAN
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r http://r.adu.org.za \ 
+    -r http://cran.rstudio.com \
+    udunits2 \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
+# Bioc libs --------------------------------------------------------------------
+# nuke cache dirs before installing pkgs; tip from Dirk E fixes broken img
+RUN rm -f /var/lib/dpkg/available && rm -rf  /var/cache/apt/*
+
+# issues with '/var/lib/dpkg/available' not found
+# this will recreate
+RUN dpkg --clear-avail
+
+# This is to avoid the error
+# 'debconf: unable to initialize frontend: Dialog'
+ENV DEBIAN_FRONTEND noninteractive
+
+# Update apt-get
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends software-properties-common \
+    && apt-add-repository universe \
+    && apt-get update \
+	&& apt-get install -y --no-install-recommends apt-utils \
+	&& apt-get install -y --no-install-recommends \
+	## Basic deps
+	gdb \
+	libxml2-dev \
+	#python-pip \
+	libz-dev \
+	liblzma-dev \
+	libbz2-dev \
+	libpng-dev \
+	## sys deps from bioc_full
+	pkg-config \
+	fortran77-compiler \
+	byacc \
+	automake \
+	curl \
+	## This section installs libraries
+	libpng-dev \
+	libpcre2-dev \
+	libnetcdf-dev \
+	libhdf5-serial-dev \
+	libfftw3-dev \
+	libopenbabel-dev \
+	libopenmpi-dev \
+	libxt-dev \
+	libgdal-dev \
+	libcairo2-dev \
+	libtiff5-dev \
+	libreadline-dev \
+	libgsl0-dev \
+	libgslcblas0 \
+	libgtk2.0-dev \
+	libgl1-mesa-dev \
+	libglu1-mesa-dev \
+	libglpk-dev \
+	libgmp3-dev \
+	libhdf5-dev \
+	libncurses-dev \
+	libbz2-dev \
+	libxpm-dev \
+	liblapack-dev \
+	libv8-dev \
+	libgtkmm-2.4-dev \
+	libmpfr-dev \
+	libudunits2-dev \
+	libmodule-build-perl \
+	libapparmor-dev \
+	libgeos-dev \
+	libproj-dev \
+	libprotoc-dev \
+	librdf0-dev \
+	libmagick++-dev \
+	libsasl2-dev \
+	libpoppler-cpp-dev \
+	libprotobuf-dev \
+	libpq-dev \
+	libperl-dev \
+	## software - perl extentions and modules
+	libarchive-extract-perl \
+	libfile-copy-recursive-perl \
+	libcgi-pm-perl \
+	libdbi-perl \
+	libdbd-mysql-perl \
+	libxml-simple-perl \
+	## Databases and other software
+	sqlite \
+	openmpi-bin \
+	mpi-default-bin \
+	openmpi-common \
+	openmpi-doc \
+	tcl8.6-dev \
+	tk-dev \
+	default-jdk \
+	imagemagick \
+	tabix \
+	ggobi \
+	graphviz \
+	protobuf-compiler \
+	jags \
+	## Additional resources
+	xfonts-100dpi \
+	xfonts-75dpi \
+	biber \
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/*
+
+
+
+
+# Bioconductor -----------------------------------------------------------------
+
+#FROM bioconductor/bioconductor_docker:devel
+ENV R_DEFAULT_INTERNET_TIMEOUT=1200
+
+#bioconductor packages
+RUN Rscript -e 'install.packages("BiocManager")'
+
+RUN Rscript -e 'BiocManager::install("Rhtslib")'
+
+RUN Rscript -e 'BiocManager::install("preprocessCore", configure.args="--disable-threading")'
+
+RUN Rscript -e 'BiocManager::install();bio<-c("ReactomePA","Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");BiocManager::install(bio,timeout=1200)' 
+
+#RUN Rscript -e 'source("http://bioconductor.org/biocLite.R");biocLite();bio<-c("Homo.sapiens","lumi","beadarray","annotate","lumiHumanAll.db","illuminaHumanv2.db","illuminaHumanv3.db","illuminaHumanv4.db","lumiHumanIDMapping","limma","WGCNA","gage","gageData","pathview","GOstats","goProfiles","ReactomePA","DOSE","clusterProfiler","RCy3","minet","csSAM","sva","pheatmap","flashClust","impute","hgu133a.db","hgu133b.db","Heatplus","marray","RCy3");biocLite(bio)' \
+#&& rm -rf /tmp/downloaded_packages /tmp/*.rds
+
+#install more from CRAN
+#RUN rm -rf /tmp/*.rds \
+#&& install2.r --error \
+#    -r http://cran.rstudio.com \
+#    CluMix \
+#&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("ricardo-bion/ggradar",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'devtools::install_github("rstudio/shinymeta",dependencies=TRUE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
+#OOmpa packages
+RUN Rscript -e 'source("http://silicovore.com/OOMPA/oompaLite.R");oompaLite()' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+#CellMix
+#RUN Rscript -e 'BiocManager::install("CellMix",siteRepos = "http://web.cbio.uct.ac.za/~renaud/CRAN")' \
+#&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'install.packages("BiocInstaller", repos="http://bioconductor.org/packages/2.13/bioc")' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+RUN Rscript -e 'BiocManager::install("CellMix",site_repository = "http://web.cbio.uct.ac.za/~renaud/CRAN",update=FALSE)' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
+
+
+
+
+

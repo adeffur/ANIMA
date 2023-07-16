@@ -1,0 +1,37 @@
+##Start with latest anima image
+
+FROM animatest/anima:4.2.2
+
+#This is me
+MAINTAINER Armin Deffur <armin.deffur@absamail.co.za>
+
+#Environment for timeout
+ENV R_DEFAULT_INTERNET_TIMEOUT 1200
+
+## Add RStudio binaries to PATH
+ENV PATH /usr/lib/rstudio-server/bin/:$PATH 
+ENV LANG en_US.UTF-8
+
+#install cmake
+
+RUN apt-get update
+
+RUN apt-get install -y \
+    cmake
+
+## updates and new installs
+
+#install more from CRAN
+RUN rm -rf /tmp/*.rds \
+&& install2.r --error \
+    -r http://r.adu.org.za \ 
+    -r http://cran.rstudio.com \
+    table1 \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+#OOMPA
+
+RUN Rscript -e 'setRepositories(graphics=FALSE, ind=c(1,4)); myRepos <- c(getOption("repos"),getOption("BioC_mirror"),OOMPA="http://bioinformatics.mdanderson.org/OOMPA/3.0");install.packages(repos=myRepos,"lite")' \
+&& rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+
